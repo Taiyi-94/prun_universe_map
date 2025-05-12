@@ -20,6 +20,11 @@ Prosperous Universe game world. Contributions welcome!
 * SVG
 * Tailwind CSS
 
+### Updating the PRUN data:
+
+* Replace `public/prun_universe_data.json` with the contents from the FIO endpoint: https://rest.fnar.net/systemstars
+* Replace `public/planet_data.json` with the contents of: https://rest.fnar.net/planet/allplanets/full
+* Run the python script 
 
 ### Getting Started with Create React App
 

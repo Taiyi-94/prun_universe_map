@@ -22,7 +22,7 @@ export const DataPointProvider = ({ children }) => {
     const fetchMeteorData = async () => {
       try {
         setIsLoading(true);
-        const response = await fetch('/systemstars.json');
+        const response = await fetch('systemstars.json');
         if (!response.ok) {
           throw new Error('Failed to fetch system stars data');
         }
