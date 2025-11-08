@@ -14,6 +14,9 @@ export const DataPointProvider = ({ children }) => {
   // Visibility toggle for the overlay
   const [isOverlayVisible, setIsOverlayVisible] = useState(false);
 
+  // Toggle for ship name labels
+  const [showShipLabels, setShowShipLabels] = useState(true);
+
   // Scale setting (absolute vs relative)
   const [useRelativeScale, setUseRelativeScale] = useState(false);
 
@@ -38,7 +41,7 @@ export const DataPointProvider = ({ children }) => {
         const freshData = await freshResponse.json();
 
         const freshSystemNamesMap = new Map(
-            freshData.map(system => [system.SystemId, system.Name])
+          freshData.map(system => [system.SystemId, system.Name])
         );
 
         const densityMap = {};
@@ -48,9 +51,9 @@ export const DataPointProvider = ({ children }) => {
         staticData.forEach(system => {
           densityMap[system.SystemId] = system.MeteoroidDensity;
           luminosityMap[system.SystemId] = system.Luminosity;
-          
+
           const freshName = freshSystemNamesMap.get(system.SystemId);
-          
+
           finalSystemNameMap[system.SystemId] = freshName || system.Name;
         });
 
@@ -89,6 +92,10 @@ export const DataPointProvider = ({ children }) => {
     setUseRelativeScale(prev => !prev);
   }, []);
 
+  const toggleShipLabels = useCallback(() => {
+    setShowShipLabels(prev => !prev);
+  }, []);
+
   // Get maximum density and luminosity value for relative scaling
   const maxValues = useMemo(() => ({
     density: Math.max(0, ...Object.values(meteorDensityData)),
@@ -108,28 +115,30 @@ export const DataPointProvider = ({ children }) => {
     systemNames,
     isOverlayVisible,
     useRelativeScale,
+    showShipLabels,
     isLoading,
     error,
     getSystemMeteorDensity,
     getSystemLuminosity,
     toggleOverlayVisibility,
     toggleScaleType,
+    toggleShipLabels,
     getNormalizedValue,
     maxValues
   };
 
   return (
-<DataPointContext.Provider value={contextValue}>
-{children}
-</DataPointContext.Provider>
-);
+    <DataPointContext.Provider value={contextValue}>
+      {children}
+    </DataPointContext.Provider>
+  );
 };
 
 // Custom hook for using the data point context
 export const useDataPoints = () => {
-const context = useContext(DataPointContext);
-if (!context) {
-throw new Error('useDataPoints must be used within a DataPointProvider');
-}
-return context;
+  const context = useContext(DataPointContext);
+  if (!context) {
+    throw new Error('useDataPoints must be used within a DataPointProvider');
+  }
+  return context;
 };

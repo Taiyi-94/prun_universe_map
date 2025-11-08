@@ -74,7 +74,7 @@ const LoginForm = ({ onClose }) => {
                     <input
                         id="login-api-key"
                         name="apiKey"
-                        type="text"
+                        type="password"
                         autoComplete="off"
                         value={apiKey}
                         onChange={event => setApiKey(event.target.value)}

@@ -11,7 +11,9 @@ const DataPointOverlay = ({ mapRef }) => {
     isOverlayVisible,
     isLoading,
     error,
-    maxValues
+    maxValues,
+    showShipLabels,
+    toggleShipLabels
   } = useDataPoints();
   const {
     graph,
@@ -21,6 +23,7 @@ const DataPointOverlay = ({ mapRef }) => {
     universeData
   } = useContext(GraphContext);
   const [selectedShipId, setSelectedShipId] = useState('__all__');
+  const labelsEnabled = Boolean(showShipLabels);
 
   const planetLookups = useMemo(() => {
     const byId = new Map();
@@ -113,15 +116,29 @@ const DataPointOverlay = ({ mapRef }) => {
   const renderOverlay = useCallback(() => {
     if (!mapRef?.current?.g) return;
 
+    const { g } = mapRef.current;
+
+    const getLayer = (className) => {
+      let layer = g.select(`g.${className}`);
+      if (layer.empty()) {
+        layer = g.append('g').attr('class', className);
+      }
+      return layer;
+    };
+
+    const flightLayer = getLayer('flight-layer');
+    const overlayLayer = getLayer('overlay-layer');
+    const shipLayer = getLayer('ship-layer');
+
+    flightLayer.selectAll('*').remove();
+    shipLayer.selectAll('*').remove();
+    overlayLayer.selectAll('*').remove();
+
+    overlayLayer.raise();
+    shipLayer.raise();
+
     const { byId: planetsById, byNaturalId: planetsByNaturalId } = planetLookups;
 
-    // Clean up existing elements
-    mapRef.current.g.selectAll('.meteor-density-group').remove();
-    mapRef.current.g.selectAll('.system-name-label').remove();
-    mapRef.current.g.selectAll('.ship-group').remove();
-    mapRef.current.g.selectAll('.flight-path').remove();
-
-    const { g } = mapRef.current;
     const transform = d3.zoomTransform(g.node());
     const zoomLevel = transform?.k || 1;
 
@@ -1346,7 +1363,7 @@ const DataPointOverlay = ({ mapRef }) => {
           const offsetFrom = offsetAmount === 0 ? segmentInfo.fromCenter : applyOffset(segmentInfo.fromCenter);
           const offsetTo = offsetAmount === 0 ? segmentInfo.toCenter : applyOffset(segmentInfo.toCenter);
 
-          g.append('path')
+          flightLayer.append('path')
             .attr('class', 'flight-path')
             .attr('d', lineGenerator([offsetFrom, offsetTo]))
             .attr('fill', 'none')
@@ -1388,7 +1405,7 @@ const DataPointOverlay = ({ mapRef }) => {
             const markerX = interpolated.x + offsetX;
             const markerY = interpolated.y + offsetY;
 
-            const markerGroup = g.append('g')
+            const markerGroup = shipLayer.append('g')
               .attr('class', 'ship-group')
               .attr('data-ship-id', ship.ShipId || ship.Id || ship.Name || 'unknown');
 
@@ -1483,6 +1500,10 @@ const DataPointOverlay = ({ mapRef }) => {
               .attr('dominant-baseline', 'hanging')
               .attr('opacity', 0.95);
 
+            if (!labelsEnabled) {
+              label.style('display', 'none');
+            }
+
             const labelPaddingX = Math.max(6 / effectiveZoom, 3);
             const labelPaddingY = Math.max(3 / effectiveZoom, 1.5);
             const labelCornerRadius = Math.max(4 / effectiveZoom, 2);
@@ -1545,6 +1566,7 @@ const DataPointOverlay = ({ mapRef }) => {
 
             const showInfo = () => {
               markerGroup.raise();
+              label.style('display', null);
               infoSpans.forEach((span) => span.style('display', null));
               labelBackground.style('display', null);
               updateLabelBackground();
@@ -1553,6 +1575,9 @@ const DataPointOverlay = ({ mapRef }) => {
             const hideInfo = () => {
               infoSpans.forEach((span) => span.style('display', 'none'));
               labelBackground.style('display', 'none');
+              if (!labelsEnabled) {
+                label.style('display', 'none');
+              }
             };
 
             markerGroup
@@ -1663,7 +1688,7 @@ const DataPointOverlay = ({ mapRef }) => {
         const timeRemainingText = '—';
         const etaText = '—';
 
-        const markerGroup = g.append('g')
+        const markerGroup = shipLayer.append('g')
           .attr('class', 'ship-group idle-ship-group')
           .attr('data-ship-id', shipIdStr);
 
@@ -1695,6 +1720,10 @@ const DataPointOverlay = ({ mapRef }) => {
           .attr('text-anchor', 'start')
           .attr('dominant-baseline', 'hanging')
           .attr('opacity', 0.95);
+
+        if (!labelsEnabled) {
+          label.style('display', 'none');
+        }
 
         const labelPaddingX = Math.max(6 / effectiveZoom, 3);
         const labelPaddingY = Math.max(3 / effectiveZoom, 1.5);
@@ -1758,6 +1787,7 @@ const DataPointOverlay = ({ mapRef }) => {
 
         const showInfo = () => {
           markerGroup.raise();
+          label.style('display', null);
           infoSpans.forEach((span) => span.style('display', null));
           labelBackground.style('display', null);
           updateLabelBackground();
@@ -1766,6 +1796,9 @@ const DataPointOverlay = ({ mapRef }) => {
         const hideInfo = () => {
           infoSpans.forEach((span) => span.style('display', 'none'));
           labelBackground.style('display', 'none');
+          if (!labelsEnabled) {
+            label.style('display', 'none');
+          }
         };
 
         markerGroup
@@ -1810,7 +1843,7 @@ const DataPointOverlay = ({ mapRef }) => {
       const nodeX = parseFloat(node.attr('x'));
       const nodeY = parseFloat(node.attr('y'));
 
-      const systemGroup = g.append('g')
+      const systemGroup = overlayLayer.append('g')
         .attr('class', 'meteor-density-group');
 
       // Calculate bar dimensions
@@ -1929,7 +1962,7 @@ const DataPointOverlay = ({ mapRef }) => {
       addBarHoverEffects(densityBar, 'Density', density, densityColorScale);
       addBarHoverEffects(luminosityBar, 'Luminosity', luminosity, luminosityColorScale);
     });
-  }, [mapRef, isOverlayVisible, isLoading, error, meteorDensityData, luminosityData, systemNames, maxValues, ships, flights, graph, selectedShipId, planetLookups, systemLookups]);
+  }, [mapRef, isOverlayVisible, isLoading, error, meteorDensityData, luminosityData, systemNames, maxValues, ships, flights, graph, selectedShipId, planetLookups, systemLookups, showShipLabels]);
 
   useEffect(() => {
     renderOverlay();
@@ -1991,6 +2024,26 @@ const DataPointOverlay = ({ mapRef }) => {
             </option>
           ))}
         </select>
+        <button
+          type="button"
+          onClick={toggleShipLabels}
+          style={{
+            marginTop: '8px',
+            background: labelsEnabled ? '#f7a600' : '#3b82f6',
+            color: '#0b0d10',
+            border: 'none',
+            borderRadius: '4px',
+            padding: '6px 8px',
+            fontSize: '11px',
+            fontWeight: 600,
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em',
+            cursor: 'pointer',
+            transition: 'background-color 0.2s ease'
+          }}
+        >
+          {labelsEnabled ? 'Hide Ship Labels' : 'Show Ship Labels'}
+        </button>
       </label>
     </div>
   );
