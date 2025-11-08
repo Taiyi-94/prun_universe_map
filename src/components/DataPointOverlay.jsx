@@ -3,6 +3,339 @@ import * as d3 from 'd3';
 import { useDataPoints } from '../contexts/DataPointContext';
 import { GraphContext } from '../contexts/GraphContext';
 
+const STORAGE_VOLUME_CAPACITY_FIELDS = [
+  'VolumeCapacity',
+  'CapacityVolume',
+  'MaxVolume',
+  'TotalVolumeCapacity',
+  'VolumeMax',
+  'VolumeLimit',
+  'VolumeCap',
+  'StorageCapacity',
+  'MaxCapacity',
+  'Capacity',
+  'CargoVolumeCapacity',
+  'MaxCargoVolume',
+  'HoldVolumeCapacity'
+];
+
+const STORAGE_WEIGHT_CAPACITY_FIELDS = [
+  'WeightCapacity',
+  'MassCapacity',
+  'CargoWeightCapacity',
+  'MaxWeight',
+  'MaxMass',
+  'WeightCap',
+  'WeightLimit',
+  'LoadCapacity',
+  'MaxCargoWeight',
+  'MaxLoadWeight'
+];
+
+const STORAGE_VOLUME_LOAD_FIELDS = [
+  'VolumeFilled',
+  'VolumeUsed',
+  'VolumeLoad',
+  'LoadVolume',
+  'UsedVolume',
+  'CurrentVolume',
+  'CargoVolume',
+  'VolumeOccupied',
+  'StorageLoad',
+  'Load'
+];
+
+const STORAGE_WEIGHT_LOAD_FIELDS = [
+  'WeightFilled',
+  'WeightUsed',
+  'WeightLoad',
+  'LoadWeight',
+  'CargoWeight',
+  'UsedWeight',
+  'CurrentWeight',
+  'MassUsed',
+  'MassLoad',
+  'WeightOccupied',
+  'StorageLoad',
+  'Load'
+];
+
+const STORAGE_PERCENT_FIELDS = [
+  'PercentFull',
+  'percentFull',
+  'FillPercent',
+  'FillPercentage',
+  'Utilization',
+  'UsagePercent'
+];
+
+const SHIP_VOLUME_CAPACITY_FIELDS = [
+  'CargoVolumeCapacity',
+  'MaxCargoVolume',
+  'HoldVolumeCapacity',
+  'MaxHoldVolume',
+  'MaxStorageVolume',
+  'VolumeCapacity',
+  'CapacityVolume',
+  'MaxVolume',
+  'VolumeLimit',
+  'VolumeCap',
+  'CargoCapacity',
+  'StorageCapacity',
+  'MaxCapacity',
+  'Capacity'
+];
+
+const SHIP_WEIGHT_CAPACITY_FIELDS = [
+  'CargoWeightCapacity',
+  'MaxCargoWeight',
+  'LoadCapacity',
+  'WeightCapacity',
+  'MassCapacity',
+  'MaxWeight',
+  'MaxMass',
+  'WeightLimit',
+  'WeightCap'
+];
+
+const SHIP_VOLUME_LOAD_FIELDS = [
+  'CargoVolumeUsed',
+  'CargoVolume',
+  'CurrentCargoVolume',
+  'UsedCargoVolume',
+  'CargoHoldVolume',
+  'HoldUsed',
+  'VolumeLoad',
+  'CurrentVolume',
+  'VolumeUsed',
+  'StorageLoad',
+  'CargoLoad',
+  'Load'
+];
+
+const SHIP_WEIGHT_LOAD_FIELDS = [
+  'CargoWeightUsed',
+  'CargoWeight',
+  'CurrentCargoWeight',
+  'UsedCargoWeight',
+  'WeightLoad',
+  'CurrentWeight',
+  'WeightUsed',
+  'MassUsed',
+  'MassLoad',
+  'StorageLoad',
+  'Load'
+];
+
+const SHIP_PERCENT_FIELDS = [
+  'CargoPercentFull',
+  'StoragePercentFull',
+  'CargoUsage',
+  'CargoUtilization',
+  'LoadPercent',
+  'CapacityPercent'
+];
+
+const SHIP_CAPACITY_PROFILES = [
+  {
+    key: 'weight3000_volume1000',
+    weight: 3000,
+    volume: 1000,
+    color: '#f91616ff',
+    label: 'Wt 3000 / Vol 1000'
+  },
+  {
+    key: 'weight1000_volume3000',
+    weight: 1000,
+    volume: 3000,
+    color: '#00eeffff',
+    label: 'Wt 1000 / Vol 3000'
+  },
+  {
+    key: 'capacity100',
+    weight: 100,
+    volume: 100,
+    color: '#367cffff',
+    label: '100 / 100'
+  },
+  {
+    key: 'capacity500',
+    weight: 500,
+    volume: 500,
+    color: '#019514ff',
+    label: '500 / 500'
+  },
+  {
+    key: 'capacity1000',
+    weight: 1000,
+    volume: 1000,
+    color: '#fffb00ff',
+    label: '1000 / 1000'
+  },
+  {
+    key: 'capacity2000',
+    weight: 2000,
+    volume: 2000,
+    color: '#ea8c08ff',
+    label: '2000 / 2000'
+  },
+  {
+    key: 'capacity5000',
+    weight: 5000,
+    volume: 5000,
+    color: '#d35cffff',
+    label: '5000 / 5000'
+  }
+];
+
+const normalizeLookupKey = (value) => {
+  if (value == null) return null;
+  const str = String(value).trim();
+  if (!str) return null;
+  return str.toLowerCase();
+};
+
+const toNumericValue = (value) => {
+  if (value == null || value === '') return null;
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.replace(/,/g, '').trim();
+    if (!normalized) {
+      return null;
+    }
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  if (typeof value === 'boolean') {
+    return value ? 1 : 0;
+  }
+  return null;
+};
+
+const pickNumericValue = (source, fields) => {
+  if (!source || typeof source !== 'object') return null;
+  for (const field of fields) {
+    if (field in source) {
+      const numeric = toNumericValue(source[field]);
+      if (numeric != null) {
+        return numeric;
+      }
+    }
+  }
+  return null;
+};
+
+const storageRecordScoreCache = new WeakMap();
+
+const evaluateStorageRecord = (record) => {
+  if (!record || typeof record !== 'object') {
+    return { score: -Infinity, timestamp: -Infinity };
+  }
+
+  if (storageRecordScoreCache.has(record)) {
+    return storageRecordScoreCache.get(record);
+  }
+
+  const rawType = typeof record.Type === 'string' ? record.Type.toLowerCase() : '';
+  const normalizedType = rawType.replace(/[^a-z]/g, '');
+
+  let score = 0;
+
+  if (normalizedType.includes('shipstore')) {
+    score += 300;
+  } else if (normalizedType.includes('ship') && normalizedType.includes('store')) {
+    score += 240;
+  } else if (normalizedType.includes('ship')) {
+    score += 180;
+  } else if (normalizedType.includes('ftlfuel')) {
+    score += 90;
+  } else if (normalizedType.includes('stlfuel')) {
+    score += 80;
+  } else if (normalizedType.includes('store')) {
+    score += 60;
+  }
+
+  if (record.FixedStore === false) {
+    score += 25;
+  }
+
+  if (pickNumericValue(record, STORAGE_WEIGHT_CAPACITY_FIELDS) != null) {
+    score += 40;
+  }
+
+  if (pickNumericValue(record, STORAGE_VOLUME_CAPACITY_FIELDS) != null) {
+    score += 40;
+  }
+
+  if (pickNumericValue(record, STORAGE_WEIGHT_LOAD_FIELDS) != null) {
+    score += 20;
+  }
+
+  if (pickNumericValue(record, STORAGE_VOLUME_LOAD_FIELDS) != null) {
+    score += 20;
+  }
+
+  if (record.Name) {
+    score += 5;
+  }
+
+  const timestampRaw = record.Timestamp
+    || record.timestamp
+    || record.LastUpdated
+    || record.lastUpdated
+    || record.UpdatedAt
+    || record.updatedAt
+    || null;
+  const timestampValue = typeof timestampRaw === 'string' || typeof timestampRaw === 'number'
+    ? Date.parse(timestampRaw)
+    : Number.NaN;
+
+  const evaluation = {
+    score,
+    timestamp: Number.isFinite(timestampValue) ? timestampValue : -Infinity
+  };
+
+  storageRecordScoreCache.set(record, evaluation);
+  return evaluation;
+};
+
+const pickPreferredStorageRecord = (existing, candidate) => {
+  if (!candidate) {
+    return existing || null;
+  }
+
+  if (!existing) {
+    return candidate;
+  }
+
+  if (existing === candidate) {
+    return existing;
+  }
+
+  const existingEval = evaluateStorageRecord(existing);
+  const candidateEval = evaluateStorageRecord(candidate);
+
+  if (candidateEval.score > existingEval.score) {
+    return candidate;
+  }
+
+  if (candidateEval.score < existingEval.score) {
+    return existing;
+  }
+
+  if (candidateEval.timestamp > existingEval.timestamp) {
+    return candidate;
+  }
+
+  if (candidateEval.timestamp < existingEval.timestamp) {
+    return existing;
+  }
+
+  return existing;
+};
+
 const DataPointOverlay = ({ mapRef }) => {
   const {
     meteorDensityData,
@@ -20,10 +353,391 @@ const DataPointOverlay = ({ mapRef }) => {
     ships,
     flights,
     planetData,
-    universeData
+    universeData,
+    storageData
   } = useContext(GraphContext);
   const [selectedShipId, setSelectedShipId] = useState('__all__');
   const labelsEnabled = Boolean(showShipLabels);
+
+  const loadColorScale = useMemo(() => (
+    d3.scaleLinear()
+      .domain([0, 0.5, 0.85, 1, 1.1])
+      .range(['#10b981', '#84cc16', '#facc15', '#f97316', '#ef4444'])
+      .clamp(true)
+  ), []);
+
+  const storageIndex = useMemo(() => {
+    const index = new Map();
+    (storageData || []).forEach((record) => {
+      if (!record || typeof record !== 'object') {
+        return;
+      }
+
+      const candidateKeys = [
+        record.StorageId,
+        record.StorageID,
+        record.StorageNaturalId,
+        record.StorageNaturalID,
+        record.StorageName,
+        record.StorageLabel,
+        record.AddressableId,
+        record.AddressableID,
+        record.AddressId,
+        record.AddressID,
+        record.Id,
+        record.ID,
+        record.Name,
+        record.NaturalId,
+        record.NaturalID,
+        record.LocationId,
+        record.OwnerId
+      ];
+
+      candidateKeys.forEach((candidate) => {
+        const normalized = normalizeLookupKey(candidate);
+        if (normalized) {
+          const existing = index.get(normalized);
+          const preferred = pickPreferredStorageRecord(existing, record);
+          if (preferred && (!existing || preferred !== existing)) {
+            index.set(normalized, preferred);
+          }
+        }
+      });
+    });
+    return index;
+  }, [storageData]);
+
+  const shipLoadInfo = useMemo(() => {
+    const map = new Map();
+
+    const normalizePercent = (value) => {
+      if (value == null) return null;
+      const numeric = toNumericValue(value);
+      if (numeric == null) return null;
+      if (numeric > 1.5) {
+        return numeric / 100;
+      }
+      return numeric;
+    };
+
+    const considerShip = (ship) => {
+      if (!ship || typeof ship !== 'object') {
+        return;
+      }
+
+      const shipIdCandidates = [
+        ship.ShipId,
+        ship.Id,
+        ship.Ship,
+        ship.Registration,
+        ship.Name,
+        ship.ShipName,
+        ship.DisplayName,
+        ship.AddressableId,
+        ship.AddressId,
+        ship.StorageAddressableId
+      ];
+
+      const storageCandidates = [
+        ship.StorageId,
+        ship.StorageID,
+        ship.StorageNaturalId,
+        ship.StorageNaturalID,
+        ship.StorageName,
+        ship.CurrentStorageId,
+        ship.CurrentStorageID,
+        ship.CurrentStorage?.StorageId,
+        ship.CurrentStorage?.StorageID,
+        ship.CurrentStorage?.Id,
+        ship.CurrentStorage?.Name,
+        ship.Storage?.StorageId,
+        ship.Storage?.StorageID,
+        ship.Storage?.Id,
+        ship.Storage?.Name,
+        ship.Storage?.StorageNaturalId,
+        ship.Storage?.StorageNaturalID,
+        ship.Storage?.NaturalId,
+        ship.Storage?.AddressableId,
+        ship.Storage?.AddressableID,
+        ship.CurrentStorage?.StorageId,
+        ship.CurrentStorage?.StorageID,
+        ship.CurrentStorage?.Id,
+        ship.CurrentStorage?.Name,
+        ship.CurrentStorage?.StorageNaturalId,
+        ship.CurrentStorage?.StorageNaturalID,
+        ship.CurrentStorage?.NaturalId,
+        ship.CurrentStorage?.AddressableId,
+        ship.CurrentStorage?.AddressableID
+      ];
+
+      const allLookupCandidates = [...shipIdCandidates, ...storageCandidates];
+
+      let storageRecord = null;
+      let storageRecordEval = null;
+
+      for (const candidate of allLookupCandidates) {
+        const normalized = normalizeLookupKey(candidate);
+        if (!normalized) {
+          continue;
+        }
+        const candidateRecord = storageIndex.get(normalized);
+        if (!candidateRecord) {
+          continue;
+        }
+
+        const evaluation = evaluateStorageRecord(candidateRecord);
+        if (!storageRecordEval
+          || evaluation.score > storageRecordEval.score
+          || (evaluation.score === storageRecordEval.score && evaluation.timestamp > storageRecordEval.timestamp)) {
+          storageRecord = candidateRecord;
+          storageRecordEval = evaluation;
+        }
+      }
+
+      const shipStorageSource = ship.Storage && typeof ship.Storage === 'object' ? ship.Storage : null;
+
+      const volumeCapacitySources = [storageRecord, shipStorageSource, ship];
+      const weightCapacitySources = [storageRecord, shipStorageSource, ship];
+      const volumeLoadSources = [storageRecord, shipStorageSource, ship];
+      const weightLoadSources = [storageRecord, shipStorageSource, ship];
+
+      const pickFromSources = (sources, fields) => {
+        for (const source of sources) {
+          const value = pickNumericValue(source, fields);
+          if (value != null) {
+            return value;
+          }
+        }
+        return null;
+      };
+
+      const volumeCapacity = pickFromSources(volumeCapacitySources, STORAGE_VOLUME_CAPACITY_FIELDS)
+        ?? pickFromSources([ship], SHIP_VOLUME_CAPACITY_FIELDS);
+      const weightCapacity = pickFromSources(weightCapacitySources, STORAGE_WEIGHT_CAPACITY_FIELDS)
+        ?? pickFromSources([ship], SHIP_WEIGHT_CAPACITY_FIELDS);
+
+      const volumeLoad = pickFromSources(volumeLoadSources, STORAGE_VOLUME_LOAD_FIELDS)
+        ?? pickFromSources([ship], SHIP_VOLUME_LOAD_FIELDS);
+      const weightLoad = pickFromSources(weightLoadSources, STORAGE_WEIGHT_LOAD_FIELDS)
+        ?? pickFromSources([ship], SHIP_WEIGHT_LOAD_FIELDS);
+
+      const percentSources = [storageRecord, shipStorageSource, ship];
+      const generalPercent = pickFromSources(percentSources, STORAGE_PERCENT_FIELDS)
+        ?? pickFromSources([ship], SHIP_PERCENT_FIELDS);
+
+      const volumeRatio = (() => {
+        if (volumeCapacity != null && Number.isFinite(volumeCapacity) && volumeCapacity > 0 && volumeLoad != null) {
+          return Math.max(0, volumeLoad / volumeCapacity);
+        }
+        return null;
+      })();
+
+      const weightRatio = (() => {
+        if (weightCapacity != null && Number.isFinite(weightCapacity) && weightCapacity > 0 && weightLoad != null) {
+          return Math.max(0, weightLoad / weightCapacity);
+        }
+        return null;
+      })();
+
+      const percentRatio = normalizePercent(generalPercent);
+
+      const ratioCandidates = [volumeRatio, weightRatio, percentRatio].filter((value) => value != null && Number.isFinite(value));
+      const ratio = ratioCandidates.length > 0 ? Math.max(...ratioCandidates) : null;
+
+      const normalizedVolumeCapacity = Number.isFinite(volumeCapacity) ? volumeCapacity : null;
+      const normalizedWeightCapacity = Number.isFinite(weightCapacity) ? weightCapacity : null;
+      const normalizedVolumeLoad = Number.isFinite(volumeLoad) ? volumeLoad : null;
+      const normalizedWeightLoad = Number.isFinite(weightLoad) ? weightLoad : null;
+
+      if (!storageRecord
+        && normalizedVolumeCapacity == null
+        && normalizedWeightCapacity == null
+        && normalizedVolumeLoad == null
+        && normalizedWeightLoad == null
+        && ratio == null) {
+        return;
+      }
+
+      const derivedVolumeLoad = normalizedVolumeLoad != null
+        ? normalizedVolumeLoad
+        : (normalizedVolumeCapacity != null && volumeRatio != null
+          ? volumeRatio * normalizedVolumeCapacity
+          : null);
+
+      const derivedWeightLoad = normalizedWeightLoad != null
+        ? normalizedWeightLoad
+        : (normalizedWeightCapacity != null && weightRatio != null
+          ? weightRatio * normalizedWeightCapacity
+          : null);
+
+      const info = {
+        storageRecord,
+        volumeCapacity: normalizedVolumeCapacity,
+        weightCapacity: normalizedWeightCapacity,
+        volumeLoad: derivedVolumeLoad,
+        weightLoad: derivedWeightLoad,
+        volumeRatio: volumeRatio != null ? Math.max(0, volumeRatio) : null,
+        weightRatio: weightRatio != null ? Math.max(0, weightRatio) : null,
+        ratio: ratio != null ? Math.max(0, ratio) : null
+      };
+
+      allLookupCandidates.forEach((candidate) => {
+        const normalized = normalizeLookupKey(candidate);
+        if (normalized && !map.has(normalized)) {
+          map.set(normalized, info);
+        }
+      });
+    };
+
+    (ships || []).forEach(considerShip);
+
+    return map;
+  }, [ships, storageIndex]);
+
+  const getShipLoadInfoById = useCallback((candidate) => {
+    const normalized = normalizeLookupKey(candidate);
+    if (!normalized) return null;
+    return shipLoadInfo.get(normalized) || null;
+  }, [shipLoadInfo]);
+
+  const formatCapacityValue = useCallback((value) => {
+    const numeric = toNumericValue(value);
+    if (numeric == null) return 'Unknown';
+    const abs = Math.abs(numeric);
+    if (abs >= 1_000_000_000) return `${(numeric / 1_000_000_000).toFixed(2)}B`;
+    if (abs >= 1_000_000) return `${(numeric / 1_000_000).toFixed(2)}M`;
+    if (abs >= 1_000) return `${(numeric / 1_000).toFixed(1)}k`;
+    if (abs >= 1) return numeric % 1 === 0 ? numeric.toFixed(0) : numeric.toFixed(1);
+    if (abs === 0) return '0';
+    return numeric.toFixed(2);
+  }, []);
+
+  const buildLoadSummary = useCallback((info) => {
+    if (!info) return null;
+
+    const entries = [];
+
+    if (info.volumeCapacity != null) {
+      const loadText = info.volumeLoad != null ? formatCapacityValue(info.volumeLoad) : 'Unknown';
+      const capacityText = formatCapacityValue(info.volumeCapacity);
+      const ratioValue = info.volumeRatio != null && Number.isFinite(info.volumeRatio)
+        ? Math.max(0, info.volumeRatio)
+        : null;
+      const ratioText = ratioValue != null
+        ? ` (${(ratioValue * 100).toFixed(1)}%)${ratioValue > 1 ? ' Over' : ''}`
+        : '';
+      entries.push(`Vol ${loadText} / ${capacityText}${ratioText}`);
+    }
+
+    if (info.weightCapacity != null) {
+      const loadText = info.weightLoad != null ? formatCapacityValue(info.weightLoad) : 'Unknown';
+      const capacityText = formatCapacityValue(info.weightCapacity);
+      const ratioValue = info.weightRatio != null && Number.isFinite(info.weightRatio)
+        ? Math.max(0, info.weightRatio)
+        : null;
+      const ratioText = ratioValue != null
+        ? ` (${(ratioValue * 100).toFixed(1)}%)${ratioValue > 1 ? ' Over' : ''}`
+        : '';
+      entries.push(`Wt ${loadText} / ${capacityText}${ratioText}`);
+    }
+
+    if (entries.length > 0) {
+      const uniqueEntries = Array.from(new Set(entries));
+      return uniqueEntries.join(' · ');
+    }
+
+    if (info.ratio != null && Number.isFinite(info.ratio)) {
+      const ratioValue = Math.max(0, info.ratio);
+      const overSuffix = ratioValue > 1 ? ' (Over)' : '';
+      return `Utilization: ${(ratioValue * 100).toFixed(1)}%${overSuffix}`;
+    }
+
+    return null;
+  }, [formatCapacityValue]);
+
+  const getLoadColorForRatio = useCallback((ratio) => {
+    if (ratio == null || !Number.isFinite(ratio)) {
+      return null;
+    }
+    const clamped = Math.max(0, Math.min(ratio, 1.1));
+    return loadColorScale(clamped);
+  }, [loadColorScale]);
+
+  const buildLoadBarDescriptors = useCallback((info) => {
+    if (!info) return [];
+
+    const descriptors = [];
+
+    const coerceNumber = (value) => {
+      if (value == null) return null;
+      const numeric = Number(value);
+      return Number.isFinite(numeric) ? numeric : null;
+    };
+
+    const buildSummary = (kindLabel, ratioValue, loadValue, capacityValue) => {
+      const percentText = ratioValue != null
+        ? `${(Math.min(ratioValue, 1) * 100).toFixed(1)}%${ratioValue > 1 ? ' (Over)' : ''}`
+        : null;
+      const loadText = loadValue != null ? formatCapacityValue(loadValue) : null;
+      const capacityText = capacityValue != null ? formatCapacityValue(capacityValue) : null;
+
+      const parts = [];
+      parts.push(percentText ? `${kindLabel} ${percentText}` : kindLabel);
+      if (loadText && capacityText) {
+        parts.push(`${loadText} / ${capacityText}`);
+      } else if (capacityText) {
+        parts.push(`Cap ${capacityText}`);
+      } else if (loadText) {
+        parts.push(`Load ${loadText}`);
+      }
+
+      return parts.filter(Boolean).join(' · ');
+    };
+
+    const addDescriptor = (key, kindLabel, ratioValue, loadValue, capacityValue) => {
+      const numericLoad = coerceNumber(loadValue);
+      const numericCapacity = coerceNumber(capacityValue);
+      const normalizedRatio = (() => {
+        if (ratioValue != null && Number.isFinite(ratioValue)) {
+          return Math.max(0, ratioValue);
+        }
+        if (numericCapacity != null && numericCapacity > 0 && numericLoad != null) {
+          return Math.max(0, numericLoad / numericCapacity);
+        }
+        return null;
+      })();
+
+      if (normalizedRatio == null && numericLoad == null && numericCapacity == null) {
+        return;
+      }
+
+      descriptors.push({
+        key,
+        kindLabel,
+        ratio: normalizedRatio,
+        load: numericLoad,
+        capacity: numericCapacity,
+        summary: buildSummary(kindLabel, normalizedRatio, numericLoad, numericCapacity)
+      });
+    };
+
+    addDescriptor('volume', 'Vol', info.volumeRatio, info.volumeLoad, info.volumeCapacity);
+    addDescriptor('weight', 'Wt', info.weightRatio, info.weightLoad, info.weightCapacity);
+
+    if (descriptors.length === 0 && info.ratio != null && Number.isFinite(info.ratio)) {
+      const normalized = Math.max(0, info.ratio);
+      descriptors.push({
+        key: 'utilization',
+        kindLabel: 'Util',
+        ratio: normalized,
+        load: null,
+        capacity: null,
+        summary: buildSummary('Util', normalized, null, null)
+      });
+    }
+
+    return descriptors;
+  }, [formatCapacityValue]);
 
   const planetLookups = useMemo(() => {
     const byId = new Map();
@@ -291,29 +1005,94 @@ const DataPointOverlay = ({ mapRef }) => {
       return null;
     };
 
-    const shipTypeColors = {
-      genfreight: '#f4b400',
-      genheavy: '#ff6f59',
-      stelmammoth: '#6c5ce7',
-      stelraptor: '#f72585',
-      koi: '#2ec4b6',
-      default: '#7bd389'
+    const getPrimaryShipId = (ship) => {
+      if (!ship) return null;
+      const candidates = [ship.ShipId, ship.Id, ship.Ship, ship.Registration, ship.Name];
+      const match = candidates.find((candidate) => candidate != null);
+      return match != null ? String(match) : null;
     };
 
-    const normalizeShipType = (ship) => {
-      if (!ship) return 'default';
-      const namePrefix = typeof ship.Name === 'string' ? ship.Name.trim().split(' ')[0].toLowerCase() : null;
-      if (namePrefix && shipTypeColors[namePrefix]) {
-        return namePrefix;
+    const getShipLoadInfo = (ship, explicitKey) => (
+      getShipLoadInfoById(explicitKey ?? getPrimaryShipId(ship))
+    );
+
+    const classifyShipType = (ship, explicitKey) => {
+      const loadInfo = getShipLoadInfo(ship, explicitKey);
+      let volumeCapacity = loadInfo?.volumeCapacity;
+      let weightCapacity = loadInfo?.weightCapacity;
+
+      if ((volumeCapacity == null || !Number.isFinite(volumeCapacity)) && ship) {
+        volumeCapacity = pickNumericValue(ship, SHIP_VOLUME_CAPACITY_FIELDS);
       }
-      const blueprint = typeof ship.BlueprintNaturalId === 'string' ? ship.BlueprintNaturalId.split('-')[1]?.toLowerCase() : null;
-      if (blueprint && shipTypeColors[blueprint]) {
-        return blueprint;
+
+      if ((weightCapacity == null || !Number.isFinite(weightCapacity)) && ship) {
+        weightCapacity = pickNumericValue(ship, SHIP_WEIGHT_CAPACITY_FIELDS);
       }
-      return 'default';
+
+      if (!Number.isFinite(volumeCapacity)) {
+        volumeCapacity = null;
+      }
+
+      if (!Number.isFinite(weightCapacity)) {
+        weightCapacity = null;
+      }
+
+      const toComparable = (value) => {
+        if (value == null || !Number.isFinite(value)) return null;
+        return Math.round(value);
+      };
+
+      const approxMatches = (expected, actual) => {
+        if (expected == null || actual == null) return false;
+        if (expected === 0) return actual === 0;
+        const tolerance = Math.max(1, expected * 0.02);
+        return Math.abs(actual - expected) <= tolerance;
+      };
+
+      const normalizedVolume = toComparable(volumeCapacity);
+      const normalizedWeight = toComparable(weightCapacity);
+
+      const matchedProfile = (() => {
+        if (normalizedWeight != null && normalizedVolume != null) {
+          return SHIP_CAPACITY_PROFILES.find((profile) => (
+            approxMatches(profile.weight, normalizedWeight)
+            && approxMatches(profile.volume, normalizedVolume)
+          )) || null;
+        }
+
+        const singleValue = normalizedWeight ?? normalizedVolume;
+        if (singleValue == null) {
+          return null;
+        }
+
+        return SHIP_CAPACITY_PROFILES.find((profile) => (
+          profile.weight === profile.volume
+          && approxMatches(profile.weight, singleValue)
+        )) || null;
+      })();
+
+      if (matchedProfile) {
+        return {
+          key: matchedProfile.key,
+          label: matchedProfile.label,
+          color: matchedProfile.color,
+          volumeCapacity,
+          weightCapacity,
+          loadInfo
+        };
+      }
+
+      return {
+        key: 'unknown',
+        label: 'Unknown Capacity',
+        color: '#9ca3af',
+        volumeCapacity,
+        weightCapacity,
+        loadInfo
+      };
     };
 
-    const getShipColor = (ship) => shipTypeColors[normalizeShipType(ship)] || shipTypeColors.default;
+    const getShipColor = (ship, explicitKey) => classifyShipType(ship, explicitKey).color;
 
     const describeShip = (ship) => ({
       shipId: ship?.ShipId ?? ship?.Id ?? ship?.Ship ?? ship?.Registration ?? null,
@@ -1164,7 +1943,18 @@ const DataPointOverlay = ({ mapRef }) => {
             lastSegment: segmentPairs[segmentPairs.length - 1] || null
           });
         }
-        const pathColor = getShipColor(ship);
+        const shipStyle = classifyShipType(ship, flightShipIdStr);
+        const pathColor = shipStyle.color;
+        const shipTypeLabel = shipStyle.label;
+        const capacityParts = [];
+        if (shipStyle.weightCapacity != null && Number.isFinite(shipStyle.weightCapacity)) {
+          capacityParts.push(`Wt ${formatCapacityValue(shipStyle.weightCapacity)}`);
+        }
+        if (shipStyle.volumeCapacity != null && Number.isFinite(shipStyle.volumeCapacity)) {
+          capacityParts.push(`Vol ${formatCapacityValue(shipStyle.volumeCapacity)}`);
+        }
+        const capacityText = capacityParts.length > 0 ? capacityParts.join(' · ') : null;
+        const loadInfo = shipStyle.loadInfo;
         const originLabelLocation = deriveLocationFromLabel(flight.Origin);
         const destinationLabelLocation = deriveLocationFromLabel(flight.Destination);
         const segmentsRaw = Array.isArray(flight.Segments) ? [...flight.Segments] : [];
@@ -1385,6 +2175,9 @@ const DataPointOverlay = ({ mapRef }) => {
             const markerSlot = getMarkerSlot(positionKey);
             const baseSpacing = Math.max(radius * 2.1, 6 / effectiveZoom);
 
+            const identifierForLoad = getPrimaryShipId(ship) ?? flightShipIdStr;
+            const shipIdStr = identifierForLoad != null ? String(identifierForLoad) : (flightShipIdStr || 'unknown');
+
             let offsetX = 0;
             let offsetY = 0;
             if (markerSlot > 0) {
@@ -1407,7 +2200,7 @@ const DataPointOverlay = ({ mapRef }) => {
 
             const markerGroup = shipLayer.append('g')
               .attr('class', 'ship-group')
-              .attr('data-ship-id', ship.ShipId || ship.Id || ship.Name || 'unknown');
+              .attr('data-ship-id', shipIdStr);
 
             markerGroup.raise();
 
@@ -1487,6 +2280,9 @@ const DataPointOverlay = ({ mapRef }) => {
             const timeRemainingText = remainingMs != null ? formatDuration(remainingMs) : 'Unknown';
             const etaText = finalArrivalEpoch != null ? formatEpoch(finalArrivalEpoch) : 'Unknown';
 
+            const loadSummary = buildLoadSummary(loadInfo);
+            const loadBarDescriptors = buildLoadBarDescriptors(loadInfo);
+
             const label = markerGroup.append('text')
               .attr('x', labelX)
               .attr('y', labelY)
@@ -1518,16 +2314,115 @@ const DataPointOverlay = ({ mapRef }) => {
               .style('pointer-events', 'none')
               .style('display', 'none');
 
-            const updateLabelBackground = () => {
+            let loadBarsContainer = null;
+            let loadBarEntries = [];
+
+            if (loadBarDescriptors.length > 0) {
+              loadBarsContainer = markerGroup.append('g')
+                .attr('class', 'ship-load-bars')
+                .style('pointer-events', 'none')
+                .style('display', 'none');
+
+              loadBarEntries = loadBarDescriptors.map((descriptor) => {
+                const barGroup = loadBarsContainer.append('g')
+                  .attr('class', `ship-load-bar ship-load-bar-${descriptor.key}`);
+                const background = barGroup.append('rect')
+                  .attr('class', 'ship-load-bar-bg');
+                const fill = barGroup.append('rect')
+                  .attr('class', 'ship-load-bar-fill');
+                const labelNode = barGroup.append('text')
+                  .attr('class', 'ship-load-bar-label')
+                  .attr('text-anchor', 'middle')
+                  .attr('dominant-baseline', 'hanging')
+                  .attr('font-weight', 500)
+                  .attr('fill', '#bfdbfe');
+
+                return {
+                  descriptor,
+                  group: barGroup,
+                  background,
+                  fill,
+                  label: labelNode
+                };
+              });
+            }
+
+            const updateInfoLayout = () => {
               const labelNode = label.node();
               if (!labelNode) return;
               const bbox = labelNode.getBBox();
               if (!bbox || (bbox.width === 0 && bbox.height === 0)) return;
+
+              let minX = bbox.x;
+              const minY = bbox.y;
+              let maxX = bbox.x + bbox.width;
+              let maxY = bbox.y + bbox.height;
+
+              if (loadBarsContainer && loadBarEntries.length > 0) {
+                const baseBarWidth = Math.max(bbox.width, Math.max(70 / effectiveZoom, radius * 3.5));
+                const barHeight = Math.max(6 / effectiveZoom, 3);
+                const barRadius = Math.max(barHeight / 2, 2 / effectiveZoom);
+                const gap = Math.max(labelPaddingY, 4 / effectiveZoom);
+                const barX = bbox.x;
+                let currentY = bbox.y + bbox.height + gap;
+
+                loadBarEntries.forEach((entry, index) => {
+                  const ratioValueRaw = entry.descriptor.ratio != null ? entry.descriptor.ratio : 0;
+                  const ratioValue = Math.max(0, Math.min(ratioValueRaw, 1.1));
+                  const fillRatio = Math.min(ratioValue, 1);
+                  const barWidth = baseBarWidth;
+
+                  entry.group.attr('transform', `translate(${barX}, ${currentY})`);
+
+                  entry.background
+                    .attr('width', barWidth)
+                    .attr('height', barHeight)
+                    .attr('rx', barRadius)
+                    .attr('ry', barRadius)
+                    .attr('fill', 'rgba(15, 23, 42, 0.85)')
+                    .attr('stroke', '#0f172a')
+                    .attr('stroke-width', 0.5 / effectiveZoom)
+                    .attr('opacity', 0.95);
+
+                  entry.fill
+                    .attr('width', Math.max(barWidth * fillRatio, Math.max(2 / effectiveZoom, 1.5)))
+                    .attr('height', barHeight)
+                    .attr('rx', barRadius)
+                    .attr('ry', barRadius)
+                    .attr('fill', getLoadColorForRatio(ratioValue) || '#38bdf8')
+                    .attr('opacity', 0.95);
+
+                  const labelFontSize = Math.max(9 / effectiveZoom, 5.5);
+                  const labelGap = Math.max(4 / effectiveZoom, 2);
+                  const labelText = entry.descriptor.summary
+                    || `${entry.descriptor.kindLabel} ${(Math.min(ratioValue, 1) * 100).toFixed(1)}%`;
+
+                  entry.label
+                    .attr('x', barWidth / 2)
+                    .attr('y', barHeight + labelGap)
+                    .attr('font-size', `${labelFontSize}px`)
+                    .text(labelText);
+
+                  const barBottom = currentY + barHeight + labelGap + labelFontSize;
+
+                  if (index === loadBarEntries.length - 1) {
+                    maxY = Math.max(maxY, barBottom);
+                  } else {
+                    maxY = Math.max(maxY, barBottom + Math.max(2 / effectiveZoom, 1));
+                  }
+
+                  minX = Math.min(minX, barX);
+                  maxX = Math.max(maxX, barX + barWidth);
+
+                  currentY = barBottom + Math.max(2 / effectiveZoom, 1);
+                });
+              }
+
               labelBackground
-                .attr('x', bbox.x - labelPaddingX)
-                .attr('y', bbox.y - labelPaddingY)
-                .attr('width', bbox.width + (labelPaddingX * 2))
-                .attr('height', bbox.height + (labelPaddingY * 2));
+                .attr('x', minX - labelPaddingX)
+                .attr('y', minY - labelPaddingY)
+                .attr('width', (maxX - minX) + (labelPaddingX * 2))
+                .attr('height', (maxY - minY) + (labelPaddingY * 2));
             };
 
             label.append('tspan')
@@ -1537,6 +2432,19 @@ const DataPointOverlay = ({ mapRef }) => {
               .attr('font-weight', 700)
               .text(shipDisplayName);
 
+            const typeDescription = capacityText
+              ? `${shipTypeLabel} · ${capacityText}`
+              : shipTypeLabel;
+
+            const typeTspan = label.append('tspan')
+              .attr('x', labelX)
+              .attr('dy', `${lineHeight}px`)
+              .attr('fill', '#c7d2fe')
+              .attr('font-weight', 500)
+              .style('font-size', `${baseFontSize * 1.05}px`)
+              .style('display', 'none')
+              .text(typeDescription);
+
             const statusTspan = label.append('tspan')
               .attr('x', labelX)
               .attr('dy', `${lineHeight}px`)
@@ -1545,6 +2453,17 @@ const DataPointOverlay = ({ mapRef }) => {
               .style('font-size', `${baseFontSize * 1.05}px`)
               .style('display', 'none')
               .text(statusLabel);
+
+            const loadSummaryTspan = loadSummary
+              ? label.append('tspan')
+                .attr('x', labelX)
+                .attr('dy', `${lineHeight}px`)
+                .attr('fill', '#bfdbfe')
+                .attr('font-weight', 500)
+                .style('font-size', `${baseFontSize}px`)
+                .style('display', 'none')
+                .text(loadSummary)
+              : null;
 
             const remainingTspan = label.append('tspan')
               .attr('x', labelX)
@@ -1561,20 +2480,25 @@ const DataPointOverlay = ({ mapRef }) => {
               .attr('font-weight', 400)
               .style('display', 'none')
               .text(`ETA: ${etaText}`);
-
-            const infoSpans = [statusTspan, remainingTspan, etaTspan];
+            const infoSpans = [typeTspan, statusTspan, loadSummaryTspan, remainingTspan, etaTspan].filter(Boolean);
 
             const showInfo = () => {
               markerGroup.raise();
               label.style('display', null);
               infoSpans.forEach((span) => span.style('display', null));
               labelBackground.style('display', null);
-              updateLabelBackground();
+              if (loadBarsContainer) {
+                loadBarsContainer.style('display', null);
+              }
+              updateInfoLayout();
             };
 
             const hideInfo = () => {
               infoSpans.forEach((span) => span.style('display', 'none'));
               labelBackground.style('display', 'none');
+              if (loadBarsContainer) {
+                loadBarsContainer.style('display', 'none');
+              }
               if (!labelsEnabled) {
                 label.style('display', 'none');
               }
@@ -1670,7 +2594,8 @@ const DataPointOverlay = ({ mapRef }) => {
 
         const markerX = systemCenter.x + offsetX;
         const markerY = systemCenter.y + offsetY;
-        const pathColor = getShipColor(ship);
+        const shipStyle = classifyShipType(ship, shipIdStr);
+        const pathColor = shipStyle.color;
         const locationName = formatLocationDisplay(idleLocationDetails)
           || systemNames[effectiveSystemId]
           || effectiveSystemId
@@ -1685,6 +2610,18 @@ const DataPointOverlay = ({ mapRef }) => {
           locationName
         });
         const statusLabel = `Idle at ${locationName}`;
+        const shipTypeLabel = shipStyle.label;
+        const capacityParts = [];
+        if (shipStyle.weightCapacity != null && Number.isFinite(shipStyle.weightCapacity)) {
+          capacityParts.push(`Wt ${formatCapacityValue(shipStyle.weightCapacity)}`);
+        }
+        if (shipStyle.volumeCapacity != null && Number.isFinite(shipStyle.volumeCapacity)) {
+          capacityParts.push(`Vol ${formatCapacityValue(shipStyle.volumeCapacity)}`);
+        }
+        const capacityText = capacityParts.length > 0 ? capacityParts.join(' · ') : null;
+        const loadInfo = shipStyle.loadInfo;
+        const loadSummary = buildLoadSummary(loadInfo);
+        const loadBarDescriptors = buildLoadBarDescriptors(loadInfo);
         const timeRemainingText = '—';
         const etaText = '—';
 
@@ -1739,16 +2676,115 @@ const DataPointOverlay = ({ mapRef }) => {
           .style('pointer-events', 'none')
           .style('display', 'none');
 
-        const updateLabelBackground = () => {
+        let loadBarsContainer = null;
+        let loadBarEntries = [];
+
+        if (loadBarDescriptors.length > 0) {
+          loadBarsContainer = markerGroup.append('g')
+            .attr('class', 'ship-load-bars')
+            .style('pointer-events', 'none')
+            .style('display', 'none');
+
+          loadBarEntries = loadBarDescriptors.map((descriptor) => {
+            const barGroup = loadBarsContainer.append('g')
+              .attr('class', `ship-load-bar ship-load-bar-${descriptor.key}`);
+            const background = barGroup.append('rect')
+              .attr('class', 'ship-load-bar-bg');
+            const fill = barGroup.append('rect')
+              .attr('class', 'ship-load-bar-fill');
+            const labelNode = barGroup.append('text')
+              .attr('class', 'ship-load-bar-label')
+              .attr('text-anchor', 'middle')
+              .attr('dominant-baseline', 'hanging')
+              .attr('font-weight', 500)
+              .attr('fill', '#bfdbfe');
+
+            return {
+              descriptor,
+              group: barGroup,
+              background,
+              fill,
+              label: labelNode
+            };
+          });
+        }
+
+        const updateInfoLayout = () => {
           const labelNode = label.node();
           if (!labelNode) return;
           const bbox = labelNode.getBBox();
           if (!bbox || (bbox.width === 0 && bbox.height === 0)) return;
+
+          let minX = bbox.x;
+          const minY = bbox.y;
+          let maxX = bbox.x + bbox.width;
+          let maxY = bbox.y + bbox.height;
+
+          if (loadBarsContainer && loadBarEntries.length > 0) {
+            const baseBarWidth = Math.max(bbox.width, Math.max(70 / effectiveZoom, radius * 3.5));
+            const barHeight = Math.max(6 / effectiveZoom, 3);
+            const barRadius = Math.max(barHeight / 2, 2 / effectiveZoom);
+            const gap = Math.max(labelPaddingY, 4 / effectiveZoom);
+            const barX = bbox.x;
+            let currentY = bbox.y + bbox.height + gap;
+
+            loadBarEntries.forEach((entry, index) => {
+              const ratioValueRaw = entry.descriptor.ratio != null ? entry.descriptor.ratio : 0;
+              const ratioValue = Math.max(0, Math.min(ratioValueRaw, 1.1));
+              const fillRatio = Math.min(ratioValue, 1);
+              const barWidth = baseBarWidth;
+
+              entry.group.attr('transform', `translate(${barX}, ${currentY})`);
+
+              entry.background
+                .attr('width', barWidth)
+                .attr('height', barHeight)
+                .attr('rx', barRadius)
+                .attr('ry', barRadius)
+                .attr('fill', 'rgba(15, 23, 42, 0.85)')
+                .attr('stroke', '#0f172a')
+                .attr('stroke-width', 0.5 / effectiveZoom)
+                .attr('opacity', 0.95);
+
+              entry.fill
+                .attr('width', Math.max(barWidth * fillRatio, Math.max(2 / effectiveZoom, 1.5)))
+                .attr('height', barHeight)
+                .attr('rx', barRadius)
+                .attr('ry', barRadius)
+                .attr('fill', getLoadColorForRatio(ratioValue) || '#38bdf8')
+                .attr('opacity', 0.95);
+
+              const labelFontSize = Math.max(9 / effectiveZoom, 5.5);
+              const labelGap = Math.max(4 / effectiveZoom, 2);
+              const labelText = entry.descriptor.summary
+                || `${entry.descriptor.kindLabel} ${(Math.min(ratioValue, 1) * 100).toFixed(1)}%`;
+
+              entry.label
+                .attr('x', barWidth / 2)
+                .attr('y', barHeight + labelGap)
+                .attr('font-size', `${labelFontSize}px`)
+                .text(labelText);
+
+              const barBottom = currentY + barHeight + labelGap + labelFontSize;
+
+              if (index === loadBarEntries.length - 1) {
+                maxY = Math.max(maxY, barBottom);
+              } else {
+                maxY = Math.max(maxY, barBottom + Math.max(2 / effectiveZoom, 1));
+              }
+
+              minX = Math.min(minX, barX);
+              maxX = Math.max(maxX, barX + barWidth);
+
+              currentY = barBottom + Math.max(2 / effectiveZoom, 1);
+            });
+          }
+
           labelBackground
-            .attr('x', bbox.x - labelPaddingX)
-            .attr('y', bbox.y - labelPaddingY)
-            .attr('width', bbox.width + (labelPaddingX * 2))
-            .attr('height', bbox.height + (labelPaddingY * 2));
+            .attr('x', minX - labelPaddingX)
+            .attr('y', minY - labelPaddingY)
+            .attr('width', (maxX - minX) + (labelPaddingX * 2))
+            .attr('height', (maxY - minY) + (labelPaddingY * 2));
         };
 
         label.append('tspan')
@@ -1758,6 +2794,19 @@ const DataPointOverlay = ({ mapRef }) => {
           .attr('font-weight', 700)
           .text(shipDisplayName);
 
+        const typeDescription = capacityText
+          ? `${shipTypeLabel} · ${capacityText}`
+          : shipTypeLabel;
+
+        const typeTspan = label.append('tspan')
+          .attr('x', labelX)
+          .attr('dy', `${lineHeight}px`)
+          .attr('fill', '#c7d2fe')
+          .attr('font-weight', 500)
+          .style('font-size', `${baseFontSize * 1.05}px`)
+          .style('display', 'none')
+          .text(typeDescription);
+
         const statusTspan = label.append('tspan')
           .attr('x', labelX)
           .attr('dy', `${lineHeight}px`)
@@ -1766,6 +2815,17 @@ const DataPointOverlay = ({ mapRef }) => {
           .style('font-size', `${baseFontSize * 1.05}px`)
           .style('display', 'none')
           .text(statusLabel);
+
+        const loadSummaryTspan = loadSummary
+          ? label.append('tspan')
+            .attr('x', labelX)
+            .attr('dy', `${lineHeight}px`)
+            .attr('fill', '#bfdbfe')
+            .attr('font-weight', 500)
+            .style('font-size', `${baseFontSize}px`)
+            .style('display', 'none')
+            .text(loadSummary)
+          : null;
 
         const remainingTspan = label.append('tspan')
           .attr('x', labelX)
@@ -1783,19 +2843,25 @@ const DataPointOverlay = ({ mapRef }) => {
           .style('display', 'none')
           .text(`ETA: ${etaText}`);
 
-        const infoSpans = [statusTspan, remainingTspan, etaTspan];
+        const infoSpans = [typeTspan, statusTspan, loadSummaryTspan, remainingTspan, etaTspan].filter(Boolean);
 
         const showInfo = () => {
           markerGroup.raise();
           label.style('display', null);
           infoSpans.forEach((span) => span.style('display', null));
           labelBackground.style('display', null);
-          updateLabelBackground();
+          if (loadBarsContainer) {
+            loadBarsContainer.style('display', null);
+          }
+          updateInfoLayout();
         };
 
         const hideInfo = () => {
           infoSpans.forEach((span) => span.style('display', 'none'));
           labelBackground.style('display', 'none');
+          if (loadBarsContainer) {
+            loadBarsContainer.style('display', 'none');
+          }
           if (!labelsEnabled) {
             label.style('display', 'none');
           }
@@ -1962,7 +3028,7 @@ const DataPointOverlay = ({ mapRef }) => {
       addBarHoverEffects(densityBar, 'Density', density, densityColorScale);
       addBarHoverEffects(luminosityBar, 'Luminosity', luminosity, luminosityColorScale);
     });
-  }, [mapRef, isOverlayVisible, isLoading, error, meteorDensityData, luminosityData, systemNames, maxValues, ships, flights, graph, selectedShipId, planetLookups, systemLookups, showShipLabels]);
+  }, [mapRef, isOverlayVisible, isLoading, error, meteorDensityData, luminosityData, systemNames, maxValues, ships, flights, graph, selectedShipId, planetLookups, systemLookups, showShipLabels, getShipLoadInfoById, getLoadColorForRatio, buildLoadSummary, buildLoadBarDescriptors, formatCapacityValue]);
 
   useEffect(() => {
     renderOverlay();
