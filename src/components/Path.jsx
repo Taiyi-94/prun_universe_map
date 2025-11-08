@@ -1,12 +1,13 @@
 // Example Path component for handling individual path interactions
-import React from 'react';
+import { useEffect } from 'react';
 import * as d3 from 'd3';
 
 const Path = ({ id, stroke, strokeWidth }) => {
   useEffect(() => {
-    const path = d3.select(`#${id}`);
+    const pathEl = d3.select(`#${id}`);
+    if (pathEl.empty()) return;
 
-    // Add interactions if needed
+    // Placeholder: pathEl can be used to attach interactions later
   }, [id, stroke, strokeWidth]);
 
   return null; // This component is for logic only

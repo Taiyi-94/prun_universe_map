@@ -1,17 +1,17 @@
-import { useState, useCallback } from 'react';
-import fetchGraphData from './useFetchGraphData';
+import { useState, useEffect } from 'react';
+import { useFetchGraphData } from './useFetchGraphData';
 
 const useGraphState = () => {
   const [graph, setGraph] = useState({ nodes: {}, edges: [] });
+  const fetched = useFetchGraphData();
 
-  const fetchGraphDataCallback = useCallback(async () => {
-    const data = await useFetchGraphData();
-    setGraph(data);
-  }, []);
+  useEffect(() => {
+    if (fetched) setGraph(fetched);
+  }, [fetched]);
 
   return {
     graph,
-    fetchGraphData: fetchGraphDataCallback,
+    setGraph,
   };
 };
 

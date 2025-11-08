@@ -1,0 +1,126 @@
+.login-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.65);
+    z-index: 3000;
+}
+
+.login-modal {
+    background: #2f2f2f;
+    border-radius: 8px;
+    padding: 24px;
+    width: min(400px, 90vw);
+    box-shadow: 0 16px 32px rgba(0, 0, 0, 0.45);
+    color: #ffffff;
+}
+
+.login-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.login-modal-header h2 {
+    font-size: 20px;
+    margin: 0;
+}
+
+.login-close-button {
+    background: transparent;
+    border: none;
+    color: #ffffff;
+    font-size: 24px;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.login-divider {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: #bbbbbb;
+    font-size: 12px;
+}
+
+.divider-line {
+    flex: 1;
+    height: 1px;
+    background: #4c4c4c;
+}
+
+.divider-text {
+    flex: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.login-form label {
+    font-size: 14px;
+}
+
+.login-form input {
+    padding: 8px;
+    border-radius: 4px;
+    border: 1px solid #4c4c4c;
+    background: #1f1f1f;
+    color: #ffffff;
+}
+
+.login-error {
+    margin-top: 4px;
+    padding: 8px;
+    border-radius: 4px;
+    background: rgba(220, 53, 69, 0.2);
+    color: #ff6b81;
+    font-size: 13px;
+}
+
+.login-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.primary-button,
+.secondary-button {
+    padding: 8px 16px;
+    border-radius: 4px;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.primary-button {
+    background: #f7a600;
+    color: #1c1c1c;
+}
+
+.primary-button:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.secondary-button {
+    background: #3c3c3c;
+    color: #ffffff;
+}
+
+.secondary-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}

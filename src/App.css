@@ -23,10 +23,12 @@ body {
 }
 
 .header-right {
-    flex-direction: column;
+  flex-direction: column;
 }
 
-.header-left, .header-center, .header-right {
+.header-left,
+.header-center,
+.header-right {
   display: flex;
   align-items: center;
   flex: 1 1 auto;
@@ -60,6 +62,46 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+}
+
+.header-auth {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 1 auto;
+  margin-bottom: 2px;
+}
+
+.auth-username {
+  font-size: 13px;
+  color: #f0f0f0;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auth-button {
+  background-color: #3c3c3c;
+  border: none;
+  color: white;
+  padding: 6px 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.auth-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.login-button {
+  background-color: #007bff;
+}
+
+.logout-button {
+  background-color: #6c757d;
 }
 
 .material-search-field,
@@ -209,7 +251,8 @@ body {
 }
 
 .sidebar .planet-id-link {
-  color: #FFC107;            /* amber/gold */
+  color: #FFC107;
+  /* amber/gold */
   text-decoration: none;
 }
 
@@ -218,7 +261,8 @@ body {
 }
 
 .sidebar .planet-id-link:hover {
-  color: #FFECB3;            /* pale gold */
+  color: #FFECB3;
+  /* pale gold */
   text-decoration: underline;
 }
 
@@ -333,8 +377,16 @@ search-container {
 }
 
 @keyframes fadeInOut {
-  0%, 100% { opacity: 0; }
-  10%, 90% { opacity: 1; }
+
+  0%,
+  100% {
+    opacity: 0;
+  }
+
+  10%,
+  90% {
+    opacity: 1;
+  }
 }
 
 .clear-button {
@@ -415,14 +467,19 @@ search-container {
   }
 
   .header-left {
-    display: none; /* This hides the logo and title */
+    display: none;
+    /* This hides the logo and title */
   }
 
-  .header-right, .header-info .header-buttons {
+  .header-right,
+  .header-info .header-buttons {
     flex-direction: column;
   }
 
-  .header-left, .header-center, .header-right, .header-info .header-buttons {
+  .header-left,
+  .header-center,
+  .header-right,
+  .header-info .header-buttons {
     flex: 0 1 auto;
   }
 

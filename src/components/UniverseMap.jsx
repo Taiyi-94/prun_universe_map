@@ -26,7 +26,7 @@ const UniverseMap = React.memo(() => {
 
   // Attach click events
   const attachClickEvents = useCallback((g) => {
-    g.selectAll('rect').on('click', function() {
+    g.selectAll('rect').on('click', function () {
       const systemId = d3.select(this).attr('id').replace('#', '');
       handleSystemClick(systemId);
     });
@@ -86,7 +86,7 @@ const UniverseMap = React.memo(() => {
         }
       }
     };
-  // eslint-disable-next-line
+    // eslint-disable-next-line
   }, [graph]);
 
   useEffect(() => {
@@ -104,7 +104,7 @@ const UniverseMap = React.memo(() => {
 
     g.selectAll('.cogc-overlay-rect').remove();
 
-    g.selectAll('rect').each(function() {
+    g.selectAll('rect').each(function () {
       const rect = d3.select(this);
       const systemId = d3.select(this).attr('id');
       const planets = planetData[systemId];
@@ -124,8 +124,8 @@ const UniverseMap = React.memo(() => {
         // Create a new overlay rect
         const overlayRect = g.append('rect')
           .attr('class', 'cogc-overlay-rect')
-          .attr('x', x - scaleUp/2)
-          .attr('y', y - scaleUp/2)
+          .attr('x', x - scaleUp / 2)
+          .attr('y', y - scaleUp / 2)
           .attr('width', width + scaleUp)
           .attr('height', height + scaleUp)
           .attr('fill', 'none')
@@ -154,7 +154,8 @@ const UniverseMap = React.memo(() => {
   }, [attachClickEvents]);
 
   return (
-    <div id="map-container">
+    <div className="map-wrapper">
+      <div id="map-container" />
       <DataPointOverlay mapRef={graphRef} />
     </div>
   );

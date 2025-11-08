@@ -1,5 +1,12 @@
-import React, { createContext, useState, useEffect, useCallback } from 'react';
-import { findShortestPath as findShortestPathUtil, highlightPath} from '../utils/graphUtils';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState
+} from 'react';
+import { findShortestPath as findShortestPathUtil, highlightPath } from '../utils/graphUtils';
+import { AuthContext } from './AuthContext';
 
 export const GraphContext = createContext();
 
@@ -9,6 +16,9 @@ export const GraphProvider = ({ children }) => {
   const [selectedSystems, setSelectedSystems] = useState([]);
   const [planetData, setPlanetData] = useState({});
   const [universeData, setUniverseData] = useState({});
+  const [ships, setShips] = useState([]);
+  const [flights, setFlights] = useState([]);
+  const { authToken } = useContext(AuthContext);
 
   useEffect(() => {
     console.log('Fetching graph data');
@@ -64,7 +74,84 @@ export const GraphProvider = ({ children }) => {
       .catch(error => {
         console.error('Error fetching planet data:', error);
       });
+
   }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    if (!authToken) {
+      setShips([]);
+      setFlights([]);
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    const headerValue = typeof authToken === 'string' ? authToken.trim() : '';
+
+    if (!headerValue) {
+      setShips([]);
+      setFlights([]);
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    const headers = {
+      Authorization: headerValue,
+      Accept: 'application/json'
+    };
+
+    const fetchShips = async () => {
+      try {
+        const response = await fetch('https://rest.fnar.net/ship/ships/OptimizedFunction', {
+          headers
+        });
+
+        if (!response.ok) {
+          throw new Error(`Ships request failed with status ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (!isMounted) return;
+        const shipsPayload = Array.isArray(data) ? data : (data?.Ships || data?.ships || []);
+        setShips(Array.isArray(shipsPayload) ? shipsPayload : []);
+      } catch (error) {
+        if (!isMounted) return;
+        console.error('Error fetching ships:', error);
+        setShips([]);
+      }
+    };
+
+    const fetchFlights = async () => {
+      try {
+        const response = await fetch('https://rest.fnar.net/ship/flights/OptimizedFunction', {
+          headers
+        });
+
+        if (!response.ok) {
+          throw new Error(`Flights request failed with status ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (!isMounted) return;
+        const flightsPayload = Array.isArray(data) ? data : (data?.Flights || data?.flights || []);
+        setFlights(Array.isArray(flightsPayload) ? flightsPayload : []);
+      } catch (error) {
+        if (!isMounted) return;
+        console.error('Error fetching flights:', error);
+        setFlights([]);
+      }
+    };
+
+    fetchShips();
+    fetchFlights();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [authToken]);
 
   const findShortestPath = useCallback((system1, system2) => {
     findShortestPathUtil(graph, system1, system2, highlightPath);
@@ -82,7 +169,11 @@ export const GraphProvider = ({ children }) => {
         setSelectedSystems,
         findShortestPath,
         planetData,
-        universeData
+        universeData,
+        ships,
+        flights,
+        setShips,
+        setFlights
       }}
     >
       {children}

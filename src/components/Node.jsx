@@ -1,5 +1,5 @@
 // Example Node component for handling individual node interactions
-import React from 'react';
+import { useEffect } from 'react';
 import * as d3 from 'd3';
 
 const Node = ({ id, x, y, width, height, fill, stroke }) => {
@@ -8,7 +8,7 @@ const Node = ({ id, x, y, width, height, fill, stroke }) => {
     const originalSize = { width, height };
     const originalPos = { x, y };
 
-    node.on('mouseover', function() {
+    node.on('mouseover', function () {
       if (id === 'rect1') return;
       node
         .attr('fill-opacity', 1)
@@ -19,7 +19,7 @@ const Node = ({ id, x, y, width, height, fill, stroke }) => {
         .attr('height', originalSize.height * 2)
         .attr('x', originalPos.x - originalSize.width / 2)
         .attr('y', originalPos.y - originalSize.height / 2);
-    }).on('mouseout', function() {
+    }).on('mouseout', function () {
       if (id === 'rect1') return;
       node.transition()
         .duration(200)
