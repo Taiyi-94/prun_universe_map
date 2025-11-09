@@ -3,63 +3,6 @@ import * as d3 from 'd3';
 import { useDataPoints } from '../contexts/DataPointContext';
 import { GraphContext } from '../contexts/GraphContext';
 
-const STORAGE_VOLUME_CAPACITY_FIELDS = [
-  'VolumeCapacity',
-  'CapacityVolume',
-  'MaxVolume',
-  'TotalVolumeCapacity',
-  'VolumeMax',
-  'VolumeLimit',
-  'VolumeCap',
-  'StorageCapacity',
-  'MaxCapacity',
-  'Capacity',
-  'CargoVolumeCapacity',
-  'MaxCargoVolume',
-  'HoldVolumeCapacity'
-];
-
-const STORAGE_WEIGHT_CAPACITY_FIELDS = [
-  'WeightCapacity',
-  'MassCapacity',
-  'CargoWeightCapacity',
-  'MaxWeight',
-  'MaxMass',
-  'WeightCap',
-  'WeightLimit',
-  'LoadCapacity',
-  'MaxCargoWeight',
-  'MaxLoadWeight'
-];
-
-const STORAGE_VOLUME_LOAD_FIELDS = [
-  'VolumeFilled',
-  'VolumeUsed',
-  'VolumeLoad',
-  'LoadVolume',
-  'UsedVolume',
-  'CurrentVolume',
-  'CargoVolume',
-  'VolumeOccupied',
-  'StorageLoad',
-  'Load'
-];
-
-const STORAGE_WEIGHT_LOAD_FIELDS = [
-  'WeightFilled',
-  'WeightUsed',
-  'WeightLoad',
-  'LoadWeight',
-  'CargoWeight',
-  'UsedWeight',
-  'CurrentWeight',
-  'MassUsed',
-  'MassLoad',
-  'WeightOccupied',
-  'StorageLoad',
-  'Load'
-];
-
 const STORAGE_PERCENT_FIELDS = [
   'PercentFull',
   'percentFull',
@@ -69,64 +12,6 @@ const STORAGE_PERCENT_FIELDS = [
   'UsagePercent'
 ];
 
-const SHIP_VOLUME_CAPACITY_FIELDS = [
-  'CargoVolumeCapacity',
-  'MaxCargoVolume',
-  'HoldVolumeCapacity',
-  'MaxHoldVolume',
-  'MaxStorageVolume',
-  'VolumeCapacity',
-  'CapacityVolume',
-  'MaxVolume',
-  'VolumeLimit',
-  'VolumeCap',
-  'CargoCapacity',
-  'StorageCapacity',
-  'MaxCapacity',
-  'Capacity'
-];
-
-const SHIP_WEIGHT_CAPACITY_FIELDS = [
-  'CargoWeightCapacity',
-  'MaxCargoWeight',
-  'LoadCapacity',
-  'WeightCapacity',
-  'MassCapacity',
-  'MaxWeight',
-  'MaxMass',
-  'WeightLimit',
-  'WeightCap'
-];
-
-const SHIP_VOLUME_LOAD_FIELDS = [
-  'CargoVolumeUsed',
-  'CargoVolume',
-  'CurrentCargoVolume',
-  'UsedCargoVolume',
-  'CargoHoldVolume',
-  'HoldUsed',
-  'VolumeLoad',
-  'CurrentVolume',
-  'VolumeUsed',
-  'StorageLoad',
-  'CargoLoad',
-  'Load'
-];
-
-const SHIP_WEIGHT_LOAD_FIELDS = [
-  'CargoWeightUsed',
-  'CargoWeight',
-  'CurrentCargoWeight',
-  'UsedCargoWeight',
-  'WeightLoad',
-  'CurrentWeight',
-  'WeightUsed',
-  'MassUsed',
-  'MassLoad',
-  'StorageLoad',
-  'Load'
-];
-
 const SHIP_PERCENT_FIELDS = [
   'CargoPercentFull',
   'StoragePercentFull',
@@ -134,6 +19,22 @@ const SHIP_PERCENT_FIELDS = [
   'CargoUtilization',
   'LoadPercent',
   'CapacityPercent'
+];
+
+const STORAGE_WEIGHT_CAPACITY_FIELDS = [
+  'WeightCapacity',
+];
+
+const STORAGE_VOLUME_CAPACITY_FIELDS = [
+  'VolumeCapacity',
+];
+
+const STORAGE_WEIGHT_LOAD_FIELDS = [
+  'WeightLoad',
+];
+
+const STORAGE_VOLUME_LOAD_FIELDS = [
+  'VolumeLoad',
 ];
 
 const SHIP_CAPACITY_PROFILES = [
@@ -384,6 +285,7 @@ const DataPointOverlay = ({ mapRef }) => {
     contracts
   } = useContext(GraphContext);
   const [selectedShipId, setSelectedShipId] = useState('__all__');
+  const [partnerFilter, setPartnerFilter] = useState('');
   const labelsEnabled = Boolean(showShipLabels);
 
   const loadColorScale = useMemo(() => (
@@ -743,14 +645,14 @@ const DataPointOverlay = ({ mapRef }) => {
       };
 
       const volumeCapacity = pickFromSources(volumeCapacitySources, STORAGE_VOLUME_CAPACITY_FIELDS)
-        ?? pickFromSources([ship], SHIP_VOLUME_CAPACITY_FIELDS);
+        ?? pickFromSources([ship], STORAGE_VOLUME_CAPACITY_FIELDS);
       const weightCapacity = pickFromSources(weightCapacitySources, STORAGE_WEIGHT_CAPACITY_FIELDS)
-        ?? pickFromSources([ship], SHIP_WEIGHT_CAPACITY_FIELDS);
+        ?? pickFromSources([ship], STORAGE_WEIGHT_CAPACITY_FIELDS);
 
       const volumeLoad = pickFromSources(volumeLoadSources, STORAGE_VOLUME_LOAD_FIELDS)
-        ?? pickFromSources([ship], SHIP_VOLUME_LOAD_FIELDS);
+        ?? pickFromSources([ship], STORAGE_VOLUME_LOAD_FIELDS);
       const weightLoad = pickFromSources(weightLoadSources, STORAGE_WEIGHT_LOAD_FIELDS)
-        ?? pickFromSources([ship], SHIP_WEIGHT_LOAD_FIELDS);
+        ?? pickFromSources([ship], STORAGE_WEIGHT_LOAD_FIELDS);
 
       const percentSources = [storageRecord, shipStorageSource, ship];
       const generalPercent = pickFromSources(percentSources, STORAGE_PERCENT_FIELDS)
@@ -829,6 +731,122 @@ const DataPointOverlay = ({ mapRef }) => {
 
     return map;
   }, [ships, storageIndex, shipmentContractsByItemId]);
+
+  const normalizedPartnerFilter = useMemo(() => normalizeLookupKey(partnerFilter) || '', [partnerFilter]);
+  const partnerFilterActive = normalizedPartnerFilter.length > 0;
+
+  const matchesPartnerFilter = useCallback((entry) => {
+    if (!partnerFilterActive) {
+      return true;
+    }
+
+    if (!entry || typeof entry !== 'object') {
+      return false;
+    }
+
+    const candidateValues = [
+      entry.partnerCode,
+      entry.PartnerCompanyCode,
+      entry.condition?.PartnerCompanyCode,
+      entry.condition?.partnerCompanyCode
+    ];
+
+    return candidateValues.some((value) => {
+      const normalized = normalizeLookupKey(value);
+      return normalized ? normalized.includes(normalizedPartnerFilter) : false;
+    });
+  }, [partnerFilterActive, normalizedPartnerFilter]);
+
+  const filterShipmentsByPartner = useCallback((shipments) => {
+    const list = Array.isArray(shipments) ? shipments : [];
+    if (!partnerFilterActive) {
+      return list;
+    }
+    return list.filter((shipment) => (
+      Array.isArray(shipment?.contractMatches)
+        ? shipment.contractMatches.some(matchesPartnerFilter)
+        : false
+    ));
+  }, [partnerFilterActive, matchesPartnerFilter]);
+
+  const partnerFilteredShipments = useMemo(() => {
+    if (!partnerFilterActive) {
+      return null;
+    }
+
+    const result = new Map();
+    shipLoadInfo.forEach((info, key) => {
+      const filtered = filterShipmentsByPartner(info?.shipments);
+      if (filtered.length > 0) {
+        result.set(key, filtered);
+      }
+    });
+    return result;
+  }, [shipLoadInfo, filterShipmentsByPartner, partnerFilterActive]);
+
+  const showNoPartnerMatches = partnerFilterActive
+    && (!partnerFilteredShipments || partnerFilteredShipments.size === 0);
+
+  useEffect(() => {
+    if (!partnerFilterActive) {
+      return;
+    }
+
+    if (process.env.NODE_ENV !== 'development') {
+      return;
+    }
+
+    const uniqueCodes = new Set();
+    let totalContracts = 0;
+    let shipmentsMissingCodes = 0;
+
+    shipLoadInfo.forEach((info, shipKey) => {
+      const shipments = Array.isArray(info?.shipments) ? info.shipments : [];
+      shipments.forEach((shipment, shipmentIndex) => {
+        const matches = Array.isArray(shipment?.contractMatches) ? shipment.contractMatches : [];
+        if (matches.length === 0) {
+          return;
+        }
+
+        let shipmentHasCode = false;
+        matches.forEach((match, matchIndex) => {
+          totalContracts += 1;
+          const partnerCode = match?.PartnerCompanyCode
+            ?? match?.partnerCompanyCode
+            ?? match?.condition?.PartnerCompanyCode
+            ?? match?.condition?.partnerCompanyCode
+            ?? match?.partnerCode
+            ?? null;
+
+          if (partnerCode) {
+            uniqueCodes.add(String(partnerCode));
+            shipmentHasCode = true;
+          } else if (process.env.NODE_ENV === 'development') {
+            console.debug('[DataPointOverlay][PartnerFilterDebug] Missing PartnerCompanyCode', {
+              shipKey,
+              shipmentIndex,
+              contractIndex: matchIndex,
+              contractId: match?.contractId ?? null,
+              contractLocalId: match?.contractLocalId ?? null,
+              contractType: match?.contractType ?? null,
+              availablePartnerCodeField: match?.partnerCode ?? null
+            });
+          }
+        });
+
+        if (!shipmentHasCode) {
+          shipmentsMissingCodes += 1;
+        }
+      });
+    });
+
+    console.debug('[DataPointOverlay][PartnerFilterDebug] Contract summary', {
+      filter: normalizedPartnerFilter,
+      totalContracts,
+      uniquePartnerCodes: Array.from(uniqueCodes).sort(),
+      shipmentsMissingCodes
+    });
+  }, [partnerFilterActive, normalizedPartnerFilter, shipLoadInfo]);
 
   const getShipLoadInfoById = useCallback((candidate) => {
     const normalized = normalizeLookupKey(candidate);
@@ -1205,6 +1223,10 @@ const DataPointOverlay = ({ mapRef }) => {
     setSelectedShipId(event.target.value);
   }, [setSelectedShipId]);
 
+  const handlePartnerFilterChange = useCallback((event) => {
+    setPartnerFilter(event.target.value);
+  }, []);
+
   useEffect(() => {
     if (selectedShipId === '__all__') return;
     const stillExists = (ships || []).some((ship) => {
@@ -1411,11 +1433,11 @@ const DataPointOverlay = ({ mapRef }) => {
       let weightCapacity = loadInfo?.weightCapacity;
 
       if ((volumeCapacity == null || !Number.isFinite(volumeCapacity)) && ship) {
-        volumeCapacity = pickNumericValue(ship, SHIP_VOLUME_CAPACITY_FIELDS);
+        volumeCapacity = pickNumericValue(ship, STORAGE_VOLUME_CAPACITY_FIELDS);
       }
 
       if ((weightCapacity == null || !Number.isFinite(weightCapacity)) && ship) {
-        weightCapacity = pickNumericValue(ship, SHIP_WEIGHT_CAPACITY_FIELDS);
+        weightCapacity = pickNumericValue(ship, STORAGE_WEIGHT_CAPACITY_FIELDS);
       }
 
       if (!Number.isFinite(volumeCapacity)) {
@@ -2336,6 +2358,20 @@ const DataPointOverlay = ({ mapRef }) => {
         const pathColor = shipStyle.color;
         const shipTypeLabel = shipStyle.label;
         const loadInfo = shipStyle.loadInfo;
+        const shipIdentifierForFilter = getPrimaryShipId(ship) ?? flightShipIdStr;
+        const normalizedShipKey = normalizeLookupKey(shipIdentifierForFilter);
+        const filteredShipments = partnerFilterActive
+          ? ((normalizedShipKey && partnerFilteredShipments?.get(normalizedShipKey))
+            || filterShipmentsByPartner(loadInfo?.shipments))
+          : (Array.isArray(loadInfo?.shipments) ? loadInfo.shipments : []);
+
+        if (partnerFilterActive && filteredShipments.length === 0) {
+          return;
+        }
+
+        const loadInfoForTiles = loadInfo
+          ? { ...loadInfo, shipments: filteredShipments }
+          : { shipments: filteredShipments };
         const originLabelLocation = deriveLocationFromLabel(flight.Origin);
         const destinationLabelLocation = deriveLocationFromLabel(flight.Destination);
         const segmentsRaw = Array.isArray(flight.Segments) ? [...flight.Segments] : [];
@@ -2662,7 +2698,7 @@ const DataPointOverlay = ({ mapRef }) => {
             const etaText = finalArrivalEpoch != null ? formatEpoch(finalArrivalEpoch) : 'Unknown';
 
             const loadSummary = buildLoadSummary(loadInfo);
-            const shipmentTiles = buildShipmentTiles(loadInfo);
+            const shipmentTiles = buildShipmentTiles(loadInfoForTiles);
             const loadBarDescriptors = buildLoadBarDescriptors(loadInfo);
 
             const label = markerGroup.append('text')
@@ -3048,6 +3084,21 @@ const DataPointOverlay = ({ mapRef }) => {
         const markerY = systemCenter.y + offsetY;
         const shipStyle = classifyShipType(ship, shipIdStr);
         const pathColor = shipStyle.color;
+        const loadInfo = shipStyle.loadInfo;
+        const normalizedShipKey = normalizeLookupKey(getPrimaryShipId(ship) ?? shipIdStr);
+        const filteredShipments = partnerFilterActive
+          ? ((normalizedShipKey && partnerFilteredShipments?.get(normalizedShipKey))
+            || filterShipmentsByPartner(loadInfo?.shipments))
+          : (Array.isArray(loadInfo?.shipments) ? loadInfo.shipments : []);
+
+        if (partnerFilterActive && filteredShipments.length === 0) {
+          return;
+        }
+
+        const loadInfoForTiles = loadInfo
+          ? { ...loadInfo, shipments: filteredShipments }
+          : { shipments: filteredShipments };
+
         const locationName = formatLocationDisplay(idleLocationDetails)
           || systemNames[effectiveSystemId]
           || effectiveSystemId
@@ -3055,9 +3106,8 @@ const DataPointOverlay = ({ mapRef }) => {
         const shipDisplayName = ship.Name || ship.ShipName || ship.ShipId || 'Unknown';
         const statusLabel = `Idle at ${locationName}`;
         const shipTypeLabel = shipStyle.label;
-        const loadInfo = shipStyle.loadInfo;
         const loadSummary = buildLoadSummary(loadInfo);
-        const shipmentTiles = buildShipmentTiles(loadInfo);
+        const shipmentTiles = buildShipmentTiles(loadInfoForTiles);
         const loadBarDescriptors = buildLoadBarDescriptors(loadInfo);
         const timeRemainingText = '—';
         const etaText = '—';
@@ -3564,7 +3614,7 @@ const DataPointOverlay = ({ mapRef }) => {
       addBarHoverEffects(densityBar, 'Density', density, densityColorScale);
       addBarHoverEffects(luminosityBar, 'Luminosity', luminosity, luminosityColorScale);
     });
-  }, [mapRef, isOverlayVisible, isLoading, error, meteorDensityData, luminosityData, systemNames, maxValues, ships, flights, graph, selectedShipId, planetLookups, systemLookups, showShipLabels, getShipLoadInfoById, getLoadColorForRatio, buildLoadSummary, buildShipmentTiles, buildLoadBarDescriptors, formatCapacityValue]);
+  }, [mapRef, isOverlayVisible, isLoading, error, meteorDensityData, luminosityData, systemNames, maxValues, ships, flights, graph, selectedShipId, planetLookups, systemLookups, showShipLabels, getShipLoadInfoById, getLoadColorForRatio, buildLoadSummary, buildShipmentTiles, buildLoadBarDescriptors, formatCapacityValue, partnerFilterActive, partnerFilteredShipments, filterShipmentsByPartner]);
 
   useEffect(() => {
     renderOverlay();
@@ -3588,6 +3638,8 @@ const DataPointOverlay = ({ mapRef }) => {
     };
   }, [mapRef, renderOverlay]);
 
+  const partnerFilterDisplay = partnerFilter.trim().toUpperCase();
+
   return (
     <div
       className="ship-filter-control"
@@ -3598,39 +3650,70 @@ const DataPointOverlay = ({ mapRef }) => {
         zIndex: 10,
         background: 'rgba(0, 0, 0, 0.65)',
         color: '#f5f5f5',
-        padding: '8px 12px',
+        padding: '10px 14px',
         borderRadius: '8px',
         boxShadow: '0 2px 6px rgba(0,0,0,0.25)',
         fontSize: '12px',
-        lineHeight: 1.4
+        lineHeight: 1.4,
+        minWidth: '220px'
       }}
     >
-      <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
         <span style={{ fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: '11px' }}>Ship Filter</span>
-        <select
-          value={selectedShipId}
-          onChange={handleShipChange}
-          style={{
-            background: '#1f2933',
-            color: '#f5f5f5',
-            border: '1px solid rgba(255,255,255,0.2)',
-            borderRadius: '4px',
-            padding: '4px 6px',
-            fontSize: '12px',
-            outline: 'none'
-          }}
-        >
-          {shipOptions.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+
+        <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <span style={{ fontSize: '11px', fontWeight: 500, opacity: 0.85 }}>Shipment Company Code</span>
+          <input
+            type="text"
+            value={partnerFilter}
+            onChange={handlePartnerFilterChange}
+            placeholder="Filter by company code"
+            style={{
+              background: '#1f2933',
+              color: '#f5f5f5',
+              border: '1px solid rgba(255,255,255,0.2)',
+              borderRadius: '4px',
+              padding: '5px 6px',
+              fontSize: '12px',
+              outline: 'none'
+            }}
+          />
+        </label>
+
+        {showNoPartnerMatches ? (
+          <span style={{ fontSize: '11px', color: '#fca5a5' }}>
+            {`No shipments found for company code "${partnerFilterDisplay}"`}
+          </span>
+        ) : null}
+
+        <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <span style={{ fontSize: '11px', fontWeight: 500, opacity: 0.85 }}>Ship Selection</span>
+          <select
+            value={selectedShipId}
+            onChange={handleShipChange}
+            style={{
+              background: '#1f2933',
+              color: '#f5f5f5',
+              border: '1px solid rgba(255,255,255,0.2)',
+              borderRadius: '4px',
+              padding: '4px 6px',
+              fontSize: '12px',
+              outline: 'none'
+            }}
+          >
+            {shipOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
         <button
           type="button"
           onClick={toggleShipLabels}
           style={{
-            marginTop: '8px',
+            marginTop: '4px',
             background: labelsEnabled ? '#f7a600' : '#3b82f6',
             color: '#0b0d10',
             border: 'none',
@@ -3646,7 +3729,7 @@ const DataPointOverlay = ({ mapRef }) => {
         >
           {labelsEnabled ? 'Hide Ship Labels' : 'Show Ship Labels'}
         </button>
-      </label>
+      </div>
     </div>
   );
 };
