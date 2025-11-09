@@ -1,16 +1,7 @@
-import React, {
-  useEffect,
-  useCallback,
-  useContext,
-  useMemo,
-  useRef,
-  useState
-} from 'react';
+import React, { useEffect, useCallback, useContext, useMemo, useState } from 'react';
 import * as d3 from 'd3';
 import { useDataPoints } from '../contexts/DataPointContext';
 import { GraphContext } from '../contexts/GraphContext';
-import { AuthContext, AUTH_STRATEGIES } from '../contexts/AuthContext';
-import { SIL_TRACKER_API_KEY, SIL_TRACKER_USERNAME } from '../constants/silTracking';
 
 const STORAGE_PERCENT_FIELDS = [
   'PercentFull',
@@ -293,20 +284,9 @@ const DataPointOverlay = ({ mapRef }) => {
     storageData,
     contracts
   } = useContext(GraphContext);
-  const {
-    authToken,
-    userName,
-    authStrategy,
-    loginWithApiKey,
-    logout
-  } = useContext(AuthContext);
   const [selectedShipId, setSelectedShipId] = useState('__all__');
   const [partnerFilter, setPartnerFilter] = useState('');
-  const [isSilTracking, setIsSilTracking] = useState(false);
-  const [silToggleLoading, setSilToggleLoading] = useState(false);
-  const [silToggleError, setSilToggleError] = useState(null);
   const labelsEnabled = Boolean(showShipLabels);
-  const previousAuthRef = useRef(null);
 
   const loadColorScale = useMemo(() => (
     d3.scaleLinear()
@@ -755,19 +735,6 @@ const DataPointOverlay = ({ mapRef }) => {
   const normalizedPartnerFilter = useMemo(() => normalizeLookupKey(partnerFilter) || '', [partnerFilter]);
   const partnerFilterActive = normalizedPartnerFilter.length > 0;
 
-  useEffect(() => {
-    setIsSilTracking(authToken === SIL_TRACKER_API_KEY);
-    if (!authToken || authToken === SIL_TRACKER_API_KEY || !userName) {
-      return;
-    }
-
-    previousAuthRef.current = {
-      token: authToken,
-      userName,
-      authStrategy: authStrategy || null
-    };
-  }, [authToken, userName, authStrategy]);
-
   const matchesPartnerFilter = useCallback((entry) => {
     if (!partnerFilterActive) {
       return true;
@@ -819,53 +786,6 @@ const DataPointOverlay = ({ mapRef }) => {
 
   const showNoPartnerMatches = partnerFilterActive
     && (!partnerFilteredShipments || partnerFilteredShipments.size === 0);
-
-  const handleSilTrackingToggle = useCallback(async () => {
-    if (!loginWithApiKey) {
-      return;
-    }
-
-    setSilToggleLoading(true);
-    setSilToggleError(null);
-
-    try {
-      if (authToken === SIL_TRACKER_API_KEY) {
-        const fallback = previousAuthRef.current;
-
-        if (
-          fallback
-          && fallback.token
-          && fallback.userName
-          && fallback.token !== SIL_TRACKER_API_KEY
-          && fallback.authStrategy === AUTH_STRATEGIES.API_KEY
-        ) {
-          await loginWithApiKey({ userName: fallback.userName, apiKey: fallback.token });
-        } else {
-          logout?.();
-        }
-
-        previousAuthRef.current = null;
-      } else {
-        if (authToken && authToken !== SIL_TRACKER_API_KEY) {
-          previousAuthRef.current = {
-            token: authToken,
-            userName,
-            authStrategy: authStrategy || null
-          };
-        }
-
-        if (!SIL_TRACKER_USERNAME || !SIL_TRACKER_API_KEY) {
-          throw new Error('SIL tracker credentials are not configured.');
-        }
-
-        await loginWithApiKey({ userName: SIL_TRACKER_USERNAME, apiKey: SIL_TRACKER_API_KEY });
-      }
-    } catch (error) {
-      setSilToggleError(error instanceof Error ? error.message : 'Failed to toggle SIL shipment tracking');
-    } finally {
-      setSilToggleLoading(false);
-    }
-  }, [authToken, authStrategy, loginWithApiKey, logout, userName]);
 
   useEffect(() => {
     if (!partnerFilterActive) {
@@ -3809,40 +3729,6 @@ const DataPointOverlay = ({ mapRef }) => {
             }}
           />
         </label>
-
-        <button
-          type="button"
-          onClick={handleSilTrackingToggle}
-          disabled={silToggleLoading}
-          style={{
-            background: isSilTracking ? '#ef4444' : '#3b82f6',
-            color: '#f5f5f5',
-            border: 'none',
-            borderRadius: '4px',
-            padding: '6px 8px',
-            fontSize: '11px',
-            fontWeight: 600,
-            cursor: silToggleLoading ? 'not-allowed' : 'pointer',
-            opacity: silToggleLoading ? 0.65 : 1,
-            transition: 'background 0.2s ease'
-          }}
-        >
-          {silToggleLoading
-            ? 'Updating…'
-            : (isSilTracking ? 'Disable SIL Shipment Tracking' : 'Track SIL Shipments')}
-        </button>
-
-        <span style={{ fontSize: '10px', opacity: 0.75 }}>
-          {isSilTracking
-            ? 'Showing you live SIL shipment data on the map.'
-            : 'SIL Shipment tracking is disabled.'}
-        </span>
-
-        {silToggleError ? (
-          <span style={{ fontSize: '10px', color: '#fca5a5' }}>
-            {silToggleError}
-          </span>
-        ) : null}
 
         {showNoPartnerMatches ? (
           <span style={{ fontSize: '11px', color: '#fca5a5' }}>
