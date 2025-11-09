@@ -1,0 +1,71 @@
+[debug] [2025-11-09T05:35:28.275Z] ----------------------------------------------------------------------
+[debug] [2025-11-09T05:35:28.277Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\aayus\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js emulators:start --only hosting
+[debug] [2025-11-09T05:35:28.277Z] CLI Version:   14.24.1
+[debug] [2025-11-09T05:35:28.277Z] Platform:      win32
+[debug] [2025-11-09T05:35:28.278Z] Node Version:  v20.18.0
+[debug] [2025-11-09T05:35:28.278Z] Time:          Sun Nov 09 2025 11:05:28 GMT+0530 (India Standard Time)
+[debug] [2025-11-09T05:35:28.278Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2025-11-09T05:35:28.436Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-11-09T05:35:28.436Z] > authorizing via signed-in user (aayushfb2012@gmail.com)
+[info] i  emulators: Starting emulators: hosting {"metadata":{"emulator":{"name":"hub"},"message":"Starting emulators: hosting"}}
+[debug] [2025-11-09T05:35:28.443Z] [logging] Logging Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[warn] !  hosting: Hosting Emulator unable to start on port 5001, starting on 5002 instead. {"metadata":{"emulator":{"name":"hosting"},"message":"Hosting Emulator unable to start on port 5001, starting on 5002 instead."}}
+[debug] [2025-11-09T05:35:28.443Z] [hosting] Hosting Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2025-11-09T05:35:28.445Z] assigned listening specs for emulators {"user":{"hub":[{"address":"127.0.0.1","family":"IPv4","port":4400},{"address":"::1","family":"IPv6","port":4400}],"logging":[{"address":"127.0.0.1","family":"IPv4","port":4500}],"hosting":[{"address":"127.0.0.1","family":"IPv4","port":5002}]},"metadata":{"message":"assigned listening specs for emulators"}}
+[debug] [2025-11-09T05:35:28.448Z] Emulator locator file path: C:\Users\aayus\AppData\Local\Temp\hub-prunshipment-tracker.json
+[debug] [2025-11-09T05:35:28.448Z] [hub] writing locator at C:\Users\aayus\AppData\Local\Temp\hub-prunshipment-tracker.json
+[debug] [2025-11-09T05:35:28.463Z] Checked if tokens are valid: true, expires at: 1762667507511
+[debug] [2025-11-09T05:35:28.464Z] Checked if tokens are valid: true, expires at: 1762667507511
+[debug] [2025-11-09T05:35:28.464Z] >>> [apiv2][query] GET https://firebasehosting.googleapis.com/v1beta1/projects/prunshipment-tracker/sites 
+[debug] [2025-11-09T05:35:29.624Z] <<< [apiv2][status] GET https://firebasehosting.googleapis.com/v1beta1/projects/prunshipment-tracker/sites 200
+[debug] [2025-11-09T05:35:29.624Z] <<< [apiv2][body] GET https://firebasehosting.googleapis.com/v1beta1/projects/prunshipment-tracker/sites {"sites":[{"name":"projects/prunshipment-tracker/sites/prunshipment-tracker","defaultUrl":"https://prunshipment-tracker.web.app","appId":"1:639070786231:web:dcaef013a3583031b77332","type":"DEFAULT_SITE"}]}
+[debug] [2025-11-09T05:35:29.624Z] Checked if tokens are valid: true, expires at: 1762667507511
+[debug] [2025-11-09T05:35:29.624Z] Checked if tokens are valid: true, expires at: 1762667507511
+[debug] [2025-11-09T05:35:29.624Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/prunshipment-tracker/webApps/1:639070786231:web:dcaef013a3583031b77332/config [none]
+[debug] [2025-11-09T05:35:30.848Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/prunshipment-tracker/webApps/1:639070786231:web:dcaef013a3583031b77332/config 200
+[debug] [2025-11-09T05:35:30.849Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/prunshipment-tracker/webApps/1:639070786231:web:dcaef013a3583031b77332/config {"projectId":"prunshipment-tracker","appId":"1:639070786231:web:dcaef013a3583031b77332","storageBucket":"prunshipment-tracker.firebasestorage.app","apiKey":"AIzaSyBVvcY2l_LgiKE7ez3ocfsgnDvuZu7gzww","authDomain":"prunshipment-tracker.firebaseapp.com","messagingSenderId":"639070786231","measurementId":"G-495WM52SFP","projectNumber":"639070786231","version":"2"}
+[debug] [2025-11-09T05:35:30.863Z] Checked if tokens are valid: true, expires at: 1762667507511
+[debug] [2025-11-09T05:35:30.863Z] Checked if tokens are valid: true, expires at: 1762667507511
+[debug] [2025-11-09T05:35:30.863Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/prunshipment-tracker [none]
+[debug] [2025-11-09T05:35:31.470Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/prunshipment-tracker 200
+[debug] [2025-11-09T05:35:31.470Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/prunshipment-tracker {"projectId":"prunshipment-tracker","projectNumber":"639070786231","displayName":"prunshipment tracker","name":"projects/prunshipment-tracker","resources":{"hostingSite":"prunshipment-tracker"},"state":"ACTIVE","etag":"1_dce4d0d5-25bb-4e21-9afe-5ad0464fde26"}
+[info] i  hosting[prunshipment-tracker]: Serving hosting files from: build {"metadata":{"emulator":{"name":"hosting"},"message":"Serving hosting files from: \u001b[1mbuild\u001b[22m"}}
+[info] +  hosting[prunshipment-tracker]: Local server: http://127.0.0.1:5002 {"metadata":{"emulator":{"name":"hosting"},"message":"Local server: \u001b[4m\u001b[1mhttp://127.0.0.1:5002\u001b[22m\u001b[24m"}}
+[warn] !  emulators: The Emulator UI is not starting because none of the running emulators have a UI component. {"metadata":{"emulator":{"name":"hub"},"message":"The Emulator UI is not starting because none of the running emulators have a UI component."}}
+[debug] [2025-11-09T05:35:31.486Z] Could not find VSCode notification endpoint: FetchError: request to http://localhost:40001/vscode/notify failed, reason: . If you are not running the Firebase Data Connect VSCode extension, this is expected and not an issue.
+[info] 
+┌─────────────────────────────────────────────────────────────┐
+│ ✔  All emulators ready! It is now safe to connect your app. │
+└─────────────────────────────────────────────────────────────┘
+
+┌──────────┬────────────────┐
+│ Emulator │ Host:Port      │
+├──────────┼────────────────┤
+│ Hosting  │ 127.0.0.1:5002 │
+└──────────┴────────────────┘
+  Emulator Hub host: 127.0.0.1 port: 4400
+  Other reserved ports: 4500
+
+Issues? Report them at https://github.com/firebase/firebase-tools/issues and attach the *-debug.log files.
+ 
+[info] i  hosting: 127.0.0.1 - - [09/Nov/2025:05:35:36 +0000] "GET / HTTP/1.1" 200 822 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36" {"metadata":{"emulator":{"name":"hosting"},"message":"127.0.0.1 - - [09/Nov/2025:05:35:36 +0000] \"GET / HTTP/1.1\" 200 822 \"-\" \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36\""}}
+[info] i  hosting: 127.0.0.1 - - [09/Nov/2025:05:35:36 +0000] "GET /static/css/main.d4989447.css HTTP/1.1" 200 - "http://127.0.0.1:5002/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36" {"metadata":{"emulator":{"name":"hosting"},"message":"127.0.0.1 - - [09/Nov/2025:05:35:36 +0000] \"GET /static/css/main.d4989447.css HTTP/1.1\" 200 - \"http://127.0.0.1:5002/\" \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36\""}}
+[info] i  hosting: 127.0.0.1 - - [09/Nov/2025:05:35:36 +0000] "GET /static/js/main.f30312af.js HTTP/1.1" 200 - "http://127.0.0.1:5002/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36" {"metadata":{"emulator":{"name":"hosting"},"message":"127.0.0.1 - - [09/Nov/2025:05:35:36 +0000] \"GET /static/js/main.f30312af.js HTTP/1.1\" 200 - \"http://127.0.0.1:5002/\" \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36\""}}
+[info] i  hosting: 127.0.0.1 - - [09/Nov/2025:05:35:36 +0000] "GET /static/media/logo.1b109f31c00a37c5007f.png HTTP/1.1" 200 260949 "http://127.0.0.1:5002/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36" {"metadata":{"emulator":{"name":"hosting"},"message":"127.0.0.1 - - [09/Nov/2025:05:35:36 +0000] \"GET /static/media/logo.1b109f31c00a37c5007f.png HTTP/1.1\" 200 260949 \"http://127.0.0.1:5002/\" \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36\""}}
+[info] i  hosting: 127.0.0.1 - - [09/Nov/2025:05:35:37 +0000] "GET /images/icons/icon-144x144.png HTTP/1.1" 200 822 "http://127.0.0.1:5002/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36" {"metadata":{"emulator":{"name":"hosting"},"message":"127.0.0.1 - - [09/Nov/2025:05:35:37 +0000] \"GET /images/icons/icon-144x144.png HTTP/1.1\" 200 822 \"http://127.0.0.1:5002/\" \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36\""}}
+[info] i  hosting: 127.0.0.1 - - [09/Nov/2025:05:56:05 +0000] "GET / HTTP/1.1" 200 822 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36" {"metadata":{"emulator":{"name":"hosting"},"message":"127.0.0.1 - - [09/Nov/2025:05:56:05 +0000] \"GET / HTTP/1.1\" 200 822 \"-\" \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36\""}}
+[info] i  hosting: 127.0.0.1 - - [09/Nov/2025:05:56:05 +0000] "GET /static/css/main.d4989447.css HTTP/1.1" 200 - "http://127.0.0.1:5002/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36" {"metadata":{"emulator":{"name":"hosting"},"message":"127.0.0.1 - - [09/Nov/2025:05:56:05 +0000] \"GET /static/css/main.d4989447.css HTTP/1.1\" 200 - \"http://127.0.0.1:5002/\" \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36\""}}
+[info] i  hosting: 127.0.0.1 - - [09/Nov/2025:05:56:05 +0000] "GET /static/js/main.f30312af.js HTTP/1.1" 200 - "http://127.0.0.1:5002/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36" {"metadata":{"emulator":{"name":"hosting"},"message":"127.0.0.1 - - [09/Nov/2025:05:56:05 +0000] \"GET /static/js/main.f30312af.js HTTP/1.1\" 200 - \"http://127.0.0.1:5002/\" \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36\""}}
+[info] i  hosting: 127.0.0.1 - - [09/Nov/2025:05:56:05 +0000] "GET /static/media/logo.1b109f31c00a37c5007f.png HTTP/1.1" 200 260949 "http://127.0.0.1:5002/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36" {"metadata":{"emulator":{"name":"hosting"},"message":"127.0.0.1 - - [09/Nov/2025:05:56:05 +0000] \"GET /static/media/logo.1b109f31c00a37c5007f.png HTTP/1.1\" 200 260949 \"http://127.0.0.1:5002/\" \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36\""}}
+[info] i  hosting: 127.0.0.1 - - [09/Nov/2025:05:56:07 +0000] "GET /images/icons/icon-144x144.png HTTP/1.1" 304 - "http://127.0.0.1:5002/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36" {"metadata":{"emulator":{"name":"hosting"},"message":"127.0.0.1 - - [09/Nov/2025:05:56:07 +0000] \"GET /images/icons/icon-144x144.png HTTP/1.1\" 304 - \"http://127.0.0.1:5002/\" \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36\""}}
+[debug] [2025-11-09T06:26:49.005Z] Received signal SIGHUP 1
+[info]  
+[info] i  emulators: Received SIGHUP for the first time. Starting a clean shutdown. 
+[info] i  emulators: Please wait for a clean shutdown or send the SIGHUP signal again to stop right now. 
+[info] i  emulators: Shutting down emulators. {"metadata":{"emulator":{"name":"hub"},"message":"Shutting down emulators."}}
+[info] i  hosting: Stopping Hosting Emulator {"metadata":{"emulator":{"name":"hosting"},"message":"Stopping Hosting Emulator"}}
+[info] i  hub: Stopping emulator hub {"metadata":{"emulator":{"name":"hub"},"message":"Stopping emulator hub"}}
+[debug] [2025-11-09T06:26:49.011Z] Emulator locator file path: C:\Users\aayus\AppData\Local\Temp\hub-prunshipment-tracker.json
+[info] i  logging: Stopping Logging Emulator {"metadata":{"emulator":{"name":"logging"},"message":"Stopping Logging Emulator"}}
+[debug] [2025-11-09T06:26:49.016Z] Could not find VSCode notification endpoint: FetchError: request to http://localhost:40001/vscode/notify failed, reason: . If you are not running the Firebase Data Connect VSCode extension, this is expected and not an issue.

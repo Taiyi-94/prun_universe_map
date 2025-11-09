@@ -9,7 +9,8 @@ import React, {
 import * as d3 from 'd3';
 import { useDataPoints } from '../contexts/DataPointContext';
 import { GraphContext } from '../contexts/GraphContext';
-import { AuthContext } from '../contexts/AuthContext';
+import { AuthContext, AUTH_STRATEGIES } from '../contexts/AuthContext';
+import { SIL_TRACKER_API_KEY, SIL_TRACKER_USERNAME } from '../constants/silTracking';
 
 const STORAGE_PERCENT_FIELDS = [
   'PercentFull',
@@ -28,8 +29,6 @@ const SHIP_PERCENT_FIELDS = [
   'LoadPercent',
   'CapacityPercent'
 ];
-
-const SIL_TRACKER_API_KEY = '2a454653-8beb-46f8-9950-ba6d6b54d101';
 
 const STORAGE_WEIGHT_CAPACITY_FIELDS = [
   'WeightCapacity',
@@ -296,6 +295,8 @@ const DataPointOverlay = ({ mapRef }) => {
   } = useContext(GraphContext);
   const {
     authToken,
+    userName,
+    authStrategy,
     loginWithApiKey,
     logout
   } = useContext(AuthContext);
@@ -305,7 +306,7 @@ const DataPointOverlay = ({ mapRef }) => {
   const [silToggleLoading, setSilToggleLoading] = useState(false);
   const [silToggleError, setSilToggleError] = useState(null);
   const labelsEnabled = Boolean(showShipLabels);
-  const previousTokenRef = useRef(null);
+  const previousAuthRef = useRef(null);
 
   const loadColorScale = useMemo(() => (
     d3.scaleLinear()
@@ -756,14 +757,16 @@ const DataPointOverlay = ({ mapRef }) => {
 
   useEffect(() => {
     setIsSilTracking(authToken === SIL_TRACKER_API_KEY);
-    if (authToken === SIL_TRACKER_API_KEY) {
+    if (!authToken || authToken === SIL_TRACKER_API_KEY || !userName) {
       return;
     }
 
-    if (authToken && authToken !== SIL_TRACKER_API_KEY) {
-      previousTokenRef.current = authToken;
-    }
-  }, [authToken]);
+    previousAuthRef.current = {
+      token: authToken,
+      userName,
+      authStrategy: authStrategy || null
+    };
+  }, [authToken, userName, authStrategy]);
 
   const matchesPartnerFilter = useCallback((entry) => {
     if (!partnerFilterActive) {
@@ -827,28 +830,42 @@ const DataPointOverlay = ({ mapRef }) => {
 
     try {
       if (authToken === SIL_TRACKER_API_KEY) {
-        const fallbackToken = previousTokenRef.current;
+        const fallback = previousAuthRef.current;
 
-        if (fallbackToken && fallbackToken.length > 0 && fallbackToken !== SIL_TRACKER_API_KEY) {
-          await loginWithApiKey(fallbackToken);
+        if (
+          fallback
+          && fallback.token
+          && fallback.userName
+          && fallback.token !== SIL_TRACKER_API_KEY
+          && fallback.authStrategy === AUTH_STRATEGIES.API_KEY
+        ) {
+          await loginWithApiKey({ userName: fallback.userName, apiKey: fallback.token });
         } else {
           logout?.();
         }
 
-        previousTokenRef.current = null;
+        previousAuthRef.current = null;
       } else {
         if (authToken && authToken !== SIL_TRACKER_API_KEY) {
-          previousTokenRef.current = authToken;
+          previousAuthRef.current = {
+            token: authToken,
+            userName,
+            authStrategy: authStrategy || null
+          };
         }
 
-        await loginWithApiKey(SIL_TRACKER_API_KEY);
+        if (!SIL_TRACKER_USERNAME || !SIL_TRACKER_API_KEY) {
+          throw new Error('SIL tracker credentials are not configured.');
+        }
+
+        await loginWithApiKey({ userName: SIL_TRACKER_USERNAME, apiKey: SIL_TRACKER_API_KEY });
       }
     } catch (error) {
       setSilToggleError(error instanceof Error ? error.message : 'Failed to toggle SIL shipment tracking');
     } finally {
       setSilToggleLoading(false);
     }
-  }, [authToken, loginWithApiKey, logout]);
+  }, [authToken, authStrategy, loginWithApiKey, logout, userName]);
 
   useEffect(() => {
     if (!partnerFilterActive) {
@@ -2535,6 +2552,17 @@ const DataPointOverlay = ({ mapRef }) => {
         const completedByTime = arrivalMs != null && arrivalMs < (nowTs - timeToleranceMs);
         const notYetDeparted = departureMs != null && departureMs > (nowTs + timeToleranceMs);
 
+        const segmentIndexCandidatesRaw = [
+          flight?.CurrentSegmentIndex,
+          flight?.SegmentIndex,
+          ship?.CurrentSegmentIndex,
+          ship?.SegmentIndex,
+          ship?.CurrentSegment
+        ];
+        const hasSegmentIndexData = segmentIndexCandidatesRaw.some((value) => (
+          typeof value === 'number' && !Number.isNaN(value)
+        ));
+
         const progressCandidates = [
           flight?.Progress,
           flight?.Completion,
@@ -2545,6 +2573,8 @@ const DataPointOverlay = ({ mapRef }) => {
         ];
         const rawProgress = progressCandidates.find((value) => value != null && !Number.isNaN(Number(value)));
         const numericProgress = rawProgress != null ? Number(rawProgress) : null;
+        const hasProgressData = rawProgress != null;
+        const hasTraversalData = hasSegmentIndexData || hasProgressData;
         const completedByProgress = numericProgress != null && numericProgress >= 0.999;
 
         const statusRaw = flight?.Status
@@ -2602,6 +2632,14 @@ const DataPointOverlay = ({ mapRef }) => {
           destinationLabelLocation
         );
 
+        const interpolatedPosition = ship ? interpolateShipPosition(ship, segmentPairs, flight) : null;
+        const activeSegmentIndex = (hasTraversalData && Number.isInteger(interpolatedPosition?.segmentIndex))
+          ? interpolatedPosition.segmentIndex
+          : null;
+        const activeSegmentProgress = (hasTraversalData && typeof interpolatedPosition?.progress === 'number')
+          ? clamp01(interpolatedPosition.progress)
+          : null;
+
         if (flight.FlightId) {
           flightSegmentsCache.set(flight.FlightId, segmentPairs);
         }
@@ -2612,7 +2650,11 @@ const DataPointOverlay = ({ mapRef }) => {
           flightSegmentsCache.set(flightShipIdStr, segmentPairs);
         }
 
-        segmentPairs.forEach((segmentInfo) => {
+        segmentPairs.forEach((segmentInfo, segmentIndex) => {
+          if (hasTraversalData && activeSegmentIndex != null && segmentIndex < activeSegmentIndex) {
+            return;
+          }
+
           const segmentKey = [segmentInfo.fromId, segmentInfo.toId].sort().join('__');
           const slot = getOffsetSlotForSegment(segmentKey);
           const offsetIndex = computeOffsetIndex(slot);
@@ -2633,9 +2675,33 @@ const DataPointOverlay = ({ mapRef }) => {
           const offsetFrom = offsetAmount === 0 ? segmentInfo.fromCenter : applyOffset(segmentInfo.fromCenter);
           const offsetTo = offsetAmount === 0 ? segmentInfo.toCenter : applyOffset(segmentInfo.toCenter);
 
+          let pathStart = offsetFrom;
+
+          if (hasTraversalData && activeSegmentIndex != null && segmentIndex === activeSegmentIndex) {
+            const progress = activeSegmentProgress != null ? activeSegmentProgress : 0;
+            if (progress >= 0.999) {
+              return;
+            }
+
+            const baseStart = {
+              x: segmentInfo.fromCenter.x + (segmentInfo.toCenter.x - segmentInfo.fromCenter.x) * progress,
+              y: segmentInfo.fromCenter.y + (segmentInfo.toCenter.y - segmentInfo.fromCenter.y) * progress
+            };
+
+            pathStart = offsetAmount === 0 ? baseStart : applyOffset(baseStart);
+          }
+
+          const startPoint = pathStart;
+          const endPoint = offsetTo;
+          const deltaX = endPoint.x - startPoint.x;
+          const deltaY = endPoint.y - startPoint.y;
+          if (Math.hypot(deltaX, deltaY) < 0.01) {
+            return;
+          }
+
           flightLayer.append('path')
             .attr('class', 'flight-path')
-            .attr('d', lineGenerator([offsetFrom, offsetTo]))
+            .attr('d', lineGenerator([startPoint, endPoint]))
             .attr('fill', 'none')
             .attr('stroke', pathColor)
             .attr('stroke-width', Math.max(1.5 / zoomLevel, 1))
@@ -2647,7 +2713,8 @@ const DataPointOverlay = ({ mapRef }) => {
           const segmentsForShip = flightSegmentsCache.get(flight.FlightId)
             || flightSegmentsCache.get(flight.ShipId)
             || flightSegmentsCache.get(flightShipIdStr);
-          const interpolated = interpolateShipPosition(ship, segmentsForShip || segmentPairs, flight);
+          const interpolated = interpolatedPosition
+            || interpolateShipPosition(ship, segmentsForShip || segmentPairs, flight);
           if (interpolated) {
             const effectiveZoom = Math.max(1, zoomLevel);
             const radius = Math.max(6 / effectiveZoom, 3);
@@ -3725,7 +3792,7 @@ const DataPointOverlay = ({ mapRef }) => {
         <span style={{ fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: '11px' }}>Ship Filter</span>
 
         <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <span style={{ fontSize: '11px', fontWeight: 500, opacity: 0.85 }}>Shipment Company Code</span>
+          <span style={{ fontSize: '11px', fontWeight: 500, opacity: 0.85 }}>Your company code to track your shipments</span>
           <input
             type="text"
             value={partnerFilter}
@@ -3767,8 +3834,8 @@ const DataPointOverlay = ({ mapRef }) => {
 
         <span style={{ fontSize: '10px', opacity: 0.75 }}>
           {isSilTracking
-            ? 'Using SIL tracking API key for live shipment data.'
-            : 'Use the SIL tracking API key to monitor SIL shipments quickly.'}
+            ? 'Showing you live SIL shipment data on the map.'
+            : 'SIL Shipment tracking is disabled.'}
         </span>
 
         {silToggleError ? (
