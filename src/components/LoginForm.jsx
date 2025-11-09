@@ -29,9 +29,10 @@ const LoginForm = ({ onClose }) => {
     const trimmedApiKey = useMemo(() => apiKey.trim(), [apiKey]);
 
     const submitDisabled = useMemo(() => {
-        const hasCredentials = trimmedUserName.length > 0 && trimmedPassword.length > 0;
+        const hasUserName = trimmedUserName.length > 0;
+        const hasPassword = trimmedPassword.length > 0;
         const hasApiKey = trimmedApiKey.length > 0;
-        return authLoading || (!hasCredentials && !hasApiKey);
+        return authLoading || !hasUserName || (!hasPassword && !hasApiKey);
     }, [authLoading, trimmedUserName, trimmedPassword, trimmedApiKey]);
 
     const handleSubmit = async event => {
@@ -40,8 +41,16 @@ const LoginForm = ({ onClose }) => {
 
         try {
             if (trimmedApiKey.length > 0) {
-                await loginWithApiKey(trimmedApiKey);
+                if (!trimmedUserName) {
+                    setLocalError('Username is required when using an API key.');
+                    return;
+                }
+                await loginWithApiKey({ userName: trimmedUserName, apiKey: trimmedApiKey });
             } else {
+                if (!trimmedPassword) {
+                    setLocalError('Password is required when an API key is not provided.');
+                    return;
+                }
                 await login({ userName: trimmedUserName, password: trimmedPassword });
             }
             onClose();
@@ -69,26 +78,14 @@ const LoginForm = ({ onClose }) => {
                         &times;
                     </button>
                 </div>
+                <p className="login-hint">
+                    Enter your username and either a password or an API key. You don&apos;t need both.
+                </p>
                 <form className="login-form" onSubmit={handleSubmit}>
-                    <label htmlFor="login-api-key">API Key (optional)</label>
-                    <input
-                        id="login-api-key"
-                        name="apiKey"
-                        type="password"
-                        autoComplete="off"
-                        value={apiKey}
-                        onChange={event => setApiKey(event.target.value)}
-                        disabled={authLoading}
-                        placeholder="Paste your API key"
-                    />
-
-                    <div className="login-divider" aria-hidden="true">
-                        <span className="divider-line" />
-                        <span className="divider-text">or</span>
-                        <span className="divider-line" />
-                    </div>
-
-                    <label htmlFor="login-username">Username</label>
+                    <label htmlFor="login-username">Username
+                        <span className="required-indicator" aria-hidden="true">*</span>
+                        <span className="sr-only"> (required)</span>
+                    </label>
                     <input
                         id="login-username"
                         name="username"
@@ -99,7 +96,7 @@ const LoginForm = ({ onClose }) => {
                         disabled={authLoading}
                     />
 
-                    <label htmlFor="login-password">Password</label>
+                    <label htmlFor="login-password">Password (optional if API key provided)</label>
                     <input
                         id="login-password"
                         name="password"
@@ -108,6 +105,24 @@ const LoginForm = ({ onClose }) => {
                         value={password}
                         onChange={event => setPassword(event.target.value)}
                         disabled={authLoading}
+                    />
+
+                    <div className="login-divider" aria-hidden="true">
+                        <span className="divider-line" />
+                        <span className="divider-text">or</span>
+                        <span className="divider-line" />
+                    </div>
+
+                    <label htmlFor="login-api-key">API Key (optional if password entered)</label>
+                    <input
+                        id="login-api-key"
+                        name="apiKey"
+                        type="password"
+                        autoComplete="off"
+                        value={apiKey}
+                        onChange={event => setApiKey(event.target.value)}
+                        disabled={authLoading}
+                        placeholder="Paste your API key"
                     />
 
                     {localError && (

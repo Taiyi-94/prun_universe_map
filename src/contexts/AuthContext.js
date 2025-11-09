@@ -10,6 +10,7 @@ export const AuthContext = createContext({
     authToken: null,
     isAuthenticated: false,
     userName: null,
+    authStrategy: null,
     login: async () => { },
     loginWithApiKey: async () => { },
     logout: () => { },
@@ -19,10 +20,24 @@ export const AuthContext = createContext({
 
 const TOKEN_STORAGE_KEY = 'prun:authToken';
 const USER_STORAGE_KEY = 'prun:authUser';
+const STRATEGY_STORAGE_KEY = 'prun:authStrategy';
+
+export const AUTH_STRATEGIES = {
+    PASSWORD: 'password',
+    API_KEY: 'api-key'
+};
+
+const normalizeString = (value) => {
+    if (typeof value !== 'string') {
+        return '';
+    }
+    return value.trim();
+};
 
 export const AuthProvider = ({ children }) => {
     const [authToken, setAuthToken] = useState(null);
     const [userName, setUserName] = useState(null);
+    const [authStrategy, setAuthStrategy] = useState(null);
     const [authLoading, setAuthLoading] = useState(false);
     const [authError, setAuthError] = useState(null);
 
@@ -30,11 +45,15 @@ export const AuthProvider = ({ children }) => {
         try {
             const storedToken = window.localStorage.getItem(TOKEN_STORAGE_KEY);
             const storedUser = window.localStorage.getItem(USER_STORAGE_KEY);
+            const storedStrategy = window.localStorage.getItem(STRATEGY_STORAGE_KEY);
             if (storedToken) {
                 setAuthToken(storedToken);
             }
             if (storedUser) {
                 setUserName(storedUser);
+            }
+            if (storedStrategy && Object.values(AUTH_STRATEGIES).includes(storedStrategy)) {
+                setAuthStrategy(storedStrategy);
             }
         } catch (storageError) {
             // eslint-disable-next-line no-console
@@ -43,6 +62,7 @@ export const AuthProvider = ({ children }) => {
     }, []);
 
     const login = useCallback(async ({ userName: loginName, password }) => {
+        const normalizedLoginName = normalizeString(loginName);
         setAuthLoading(true);
         setAuthError(null);
         try {
@@ -112,15 +132,17 @@ export const AuthProvider = ({ children }) => {
             }
 
             setAuthToken(token);
-            setUserName(loginName || null);
+            setUserName(normalizedLoginName || null);
+            setAuthStrategy(AUTH_STRATEGIES.PASSWORD);
 
             try {
                 window.localStorage.setItem(TOKEN_STORAGE_KEY, token);
-                if (loginName) {
-                    window.localStorage.setItem(USER_STORAGE_KEY, loginName);
+                if (normalizedLoginName) {
+                    window.localStorage.setItem(USER_STORAGE_KEY, normalizedLoginName);
                 } else {
                     window.localStorage.removeItem(USER_STORAGE_KEY);
                 }
+                window.localStorage.setItem(STRATEGY_STORAGE_KEY, AUTH_STRATEGIES.PASSWORD);
             } catch (storageError) {
                 // eslint-disable-next-line no-console
                 console.warn('Failed to persist auth token', storageError);
@@ -131,9 +153,11 @@ export const AuthProvider = ({ children }) => {
             setAuthError(error instanceof Error ? error.message : 'Login failed');
             setAuthToken(null);
             setUserName(null);
+            setAuthStrategy(null);
             try {
                 window.localStorage.removeItem(TOKEN_STORAGE_KEY);
                 window.localStorage.removeItem(USER_STORAGE_KEY);
+                window.localStorage.removeItem(STRATEGY_STORAGE_KEY);
             } catch (storageError) {
                 // eslint-disable-next-line no-console
                 console.warn('Failed to clear stored token', storageError);
@@ -144,8 +168,13 @@ export const AuthProvider = ({ children }) => {
         }
     }, []);
 
-    const loginWithApiKey = useCallback(async apiKeyInput => {
-        const trimmedKey = typeof apiKeyInput === 'string' ? apiKeyInput.trim() : '';
+    const loginWithApiKey = useCallback(async ({ userName: loginName, apiKey: apiKeyInput }) => {
+        const normalizedLoginName = normalizeString(loginName);
+        const trimmedKey = normalizeString(apiKeyInput);
+
+        if (!normalizedLoginName) {
+            throw new Error('Username is required when using an API key.');
+        }
 
         if (!trimmedKey) {
             throw new Error('API key cannot be empty.');
@@ -156,11 +185,13 @@ export const AuthProvider = ({ children }) => {
 
         try {
             setAuthToken(trimmedKey);
-            setUserName('API Key');
+            setUserName(normalizedLoginName);
+            setAuthStrategy(AUTH_STRATEGIES.API_KEY);
 
             try {
                 window.localStorage.setItem(TOKEN_STORAGE_KEY, trimmedKey);
-                window.localStorage.setItem(USER_STORAGE_KEY, 'API Key');
+                window.localStorage.setItem(USER_STORAGE_KEY, normalizedLoginName);
+                window.localStorage.setItem(STRATEGY_STORAGE_KEY, AUTH_STRATEGIES.API_KEY);
             } catch (storageError) {
                 // eslint-disable-next-line no-console
                 console.warn('Failed to persist API key', storageError);
@@ -179,9 +210,11 @@ export const AuthProvider = ({ children }) => {
         setAuthToken(null);
         setUserName(null);
         setAuthError(null);
+        setAuthStrategy(null);
         try {
             window.localStorage.removeItem(TOKEN_STORAGE_KEY);
             window.localStorage.removeItem(USER_STORAGE_KEY);
+            window.localStorage.removeItem(STRATEGY_STORAGE_KEY);
         } catch (storageError) {
             // eslint-disable-next-line no-console
             console.warn('Failed to clear stored token', storageError);
@@ -192,12 +225,13 @@ export const AuthProvider = ({ children }) => {
         authToken,
         isAuthenticated: Boolean(authToken),
         userName,
+        authStrategy,
         login,
         loginWithApiKey,
         logout,
         authLoading,
         authError
-    }), [authToken, userName, login, loginWithApiKey, logout, authLoading, authError]);
+    }), [authToken, userName, authStrategy, login, loginWithApiKey, logout, authLoading, authError]);
 
     return (
         <AuthContext.Provider value={value}>

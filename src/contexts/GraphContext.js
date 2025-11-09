@@ -3,10 +3,14 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useState
 } from 'react';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { findShortestPath as findShortestPathUtil, highlightPath } from '../utils/graphUtils';
 import { AuthContext } from './AuthContext';
+import { getFirestoreClient } from '../utils/firebaseClient';
+import { SIL_TRACKER_API_KEY, SIL_TRACKER_USERNAME } from '../constants/silTracking';
 
 export const GraphContext = createContext();
 
@@ -20,7 +24,8 @@ export const GraphProvider = ({ children }) => {
   const [flights, setFlights] = useState([]);
   const [storageData, setStorageData] = useState([]);
   const [contracts, setContracts] = useState([]);
-  const { authToken } = useContext(AuthContext);
+  const [contractSnapshot, setContractSnapshot] = useState([]);
+  const { authToken, userName } = useContext(AuthContext);
 
   useEffect(() => {
     console.log('Fetching graph data');
@@ -82,11 +87,17 @@ export const GraphProvider = ({ children }) => {
   useEffect(() => {
     let isMounted = true;
 
-    if (!authToken) {
+    const rawUserName = authToken === SIL_TRACKER_API_KEY
+      ? SIL_TRACKER_USERNAME
+      : userName;
+    const normalizedUserName = typeof rawUserName === 'string' ? rawUserName.trim() : '';
+
+    if (!authToken || !normalizedUserName) {
       setShips([]);
       setFlights([]);
       setStorageData([]);
       setContracts([]);
+      setContractSnapshot([]);
       return () => {
         isMounted = false;
       };
@@ -99,19 +110,25 @@ export const GraphProvider = ({ children }) => {
       setFlights([]);
       setStorageData([]);
       setContracts([]);
+      setContractSnapshot([]);
       return () => {
         isMounted = false;
       };
     }
+
+    const encodedUserName = encodeURIComponent(normalizedUserName);
 
     const headers = {
       Authorization: headerValue,
       Accept: 'application/json'
     };
 
+    setContracts([]);
+    setContractSnapshot([]);
+
     const fetchShips = async () => {
       try {
-        const response = await fetch('https://rest.fnar.net/ship/ships/OptimizedFunction', {
+        const response = await fetch(`https://rest.fnar.net/ship/ships/${encodedUserName}`, {
           headers
         });
 
@@ -132,7 +149,7 @@ export const GraphProvider = ({ children }) => {
 
     const fetchFlights = async () => {
       try {
-        const response = await fetch('https://rest.fnar.net/ship/flights/OptimizedFunction', {
+        const response = await fetch(`https://rest.fnar.net/ship/flights/${encodedUserName}`, {
           headers
         });
 
@@ -153,7 +170,7 @@ export const GraphProvider = ({ children }) => {
 
     const fetchStorage = async () => {
       try {
-        const response = await fetch('https://rest.fnar.net/storage/OptimizedFunction', {
+        const response = await fetch(`https://rest.fnar.net/storage/${encodedUserName}`, {
           headers
         });
 
@@ -173,8 +190,12 @@ export const GraphProvider = ({ children }) => {
     };
 
     const fetchContracts = async () => {
+      if (authToken === SIL_TRACKER_API_KEY) {
+        return;
+      }
+
       try {
-        const response = await fetch('https://rest.fnar.net/contract/allcontracts', {
+        const response = await fetch(`https://rest.fnar.net/contract/allcontracts/${encodedUserName}`, {
           headers
         });
 
@@ -187,11 +208,14 @@ export const GraphProvider = ({ children }) => {
         const contractsPayload = Array.isArray(data)
           ? data
           : (data?.Contracts || data?.contracts || []);
-        setContracts(Array.isArray(contractsPayload) ? contractsPayload : []);
+        const normalizedContracts = Array.isArray(contractsPayload) ? contractsPayload : [];
+        setContracts(normalizedContracts);
+        setContractSnapshot(normalizedContracts);
       } catch (error) {
         if (!isMounted) return;
         console.error('Error fetching contracts:', error);
         setContracts([]);
+        setContractSnapshot([]);
       }
     };
 
@@ -203,35 +227,74 @@ export const GraphProvider = ({ children }) => {
     return () => {
       isMounted = false;
     };
-  }, [authToken]);
+  }, [authToken, userName]);
 
   const findShortestPath = useCallback((system1, system2) => {
     findShortestPathUtil(graph, system1, system2, highlightPath);
   }, [graph]);
 
+  useEffect(() => {
+    if (authToken !== SIL_TRACKER_API_KEY) {
+      return () => { };
+    }
+
+    const firestore = getFirestoreClient();
+    if (!firestore) {
+      console.warn('[GraphContext] Firebase is not configured; SIL tracking snapshot subscription disabled');
+      return () => { };
+    }
+
+    const docRef = doc(firestore, 'snapshots', 'contracts');
+    const unsubscribe = onSnapshot(docRef, (docSnap) => {
+      const data = docSnap.exists() ? docSnap.data() : null;
+      const snapshotContracts = Array.isArray(data?.contracts) ? data.contracts : [];
+      setContracts(snapshotContracts);
+      setContractSnapshot(snapshotContracts);
+    }, (error) => {
+      console.error('Error subscribing to SIL contract snapshot:', error);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [authToken]);
+
+  const contextValue = useMemo(() => ({
+    graph,
+    setGraph,
+    materials,
+    setMaterials,
+    selectedSystems,
+    setSelectedSystems,
+    findShortestPath,
+    planetData,
+    universeData,
+    ships,
+    flights,
+    storageData,
+    contracts,
+    contractSnapshot,
+    setShips,
+    setFlights,
+    setStorageData,
+    setContracts,
+    setContractSnapshot
+  }), [
+    graph,
+    materials,
+    selectedSystems,
+    findShortestPath,
+    planetData,
+    universeData,
+    ships,
+    flights,
+    storageData,
+    contracts,
+    contractSnapshot
+  ]);
 
   return (
-    <GraphContext.Provider
-      value={{
-        graph,
-        setGraph,
-        materials,
-        setMaterials,
-        selectedSystems,
-        setSelectedSystems,
-        findShortestPath,
-        planetData,
-        universeData,
-        ships,
-        flights,
-        storageData,
-        contracts,
-        setShips,
-        setFlights,
-        setStorageData,
-        setContracts
-      }}
-    >
+    <GraphContext.Provider value={contextValue}>
       {children}
     </GraphContext.Provider>
   );
