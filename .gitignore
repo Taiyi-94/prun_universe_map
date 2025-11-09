@@ -23,6 +23,8 @@ firebase-debug.log*
 .env.test.local
 .env.production.local
 .env.production
+public/env-config.js
+.runtimeconfig.json
 
 # Editor settings
 .idea/
