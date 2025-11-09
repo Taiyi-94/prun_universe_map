@@ -7,6 +7,7 @@ build
 /dist
 /coverage
 /prun_universe_map.tar
+.firebase/hosting.*
 
 # Logs
 npm-debug.log*
