@@ -205,7 +205,13 @@ const toNumericValue = (value) => {
     if (!normalized) {
       return null;
     }
-    const parsed = Number(normalized);
+
+    const numericMatch = normalized.match(/-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/);
+    if (!numericMatch) {
+      return null;
+    }
+
+    const parsed = Number(numericMatch[0]);
     return Number.isFinite(parsed) ? parsed : null;
   }
   if (typeof value === 'boolean') {
@@ -213,6 +219,26 @@ const toNumericValue = (value) => {
   }
   return null;
 };
+
+const normalizeDeliveryShipmentType = (value) => {
+  if (value == null) {
+    return null;
+  }
+
+  const text = String(value).trim();
+  if (!text) {
+    return null;
+  }
+
+  const collapsed = text.toUpperCase().replace(/[^A-Z]/g, '');
+  if (collapsed === 'DELIVERYSHIPMENT' || collapsed === 'DELIVERSHIPMENT') {
+    return 'DELIVERY_SHIPMENT';
+  }
+
+  return null;
+};
+
+const isDeliveryShipmentType = (value) => normalizeDeliveryShipmentType(value) != null;
 
 const pickNumericValue = (source, fields) => {
   if (!source || typeof source !== 'object') return null;
@@ -354,7 +380,8 @@ const DataPointOverlay = ({ mapRef }) => {
     flights,
     planetData,
     universeData,
-    storageData
+    storageData,
+    contracts
   } = useContext(GraphContext);
   const [selectedShipId, setSelectedShipId] = useState('__all__');
   const labelsEnabled = Boolean(showShipLabels);
@@ -406,6 +433,132 @@ const DataPointOverlay = ({ mapRef }) => {
     });
     return index;
   }, [storageData]);
+
+  const shipmentContractsByItemId = useMemo(() => {
+    const map = new Map();
+
+    const normalizeTimestamp = (value) => {
+      if (value == null) return null;
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        return value;
+      }
+      if (typeof value === 'string') {
+        const parsed = Date.parse(value);
+        return Number.isFinite(parsed) ? parsed : null;
+      }
+      return null;
+    };
+
+    (contracts || []).forEach((contract) => {
+      if (!contract || typeof contract !== 'object') {
+        return;
+      }
+
+      const rawContractType = contract.Type || contract.type || null;
+
+      const contractId = contract.ContractId || contract.contractId || null;
+      const contractLocalId = contract.ContractLocalId
+        || contract.ContractNumber
+        || contract.ContractCode
+        || contract.contractLocalId
+        || contract.contractNumber
+        || contract.contractCode
+        || null;
+      const contractStatus = contract.Status || contract.status || null;
+      const partnerName = contract.PartnerName || contract.partnerName || null;
+      const partnerCode = contract.PartnerCompanyCode || contract.partnerCompanyCode || null;
+      const dueDateEpochMs = toNumericValue(contract.DueDateEpochMs ?? contract.dueDateEpochMs);
+      const contractTimestamp = normalizeTimestamp(contract.Timestamp ?? contract.timestamp);
+
+      const conditions = Array.isArray(contract.Conditions)
+        ? contract.Conditions
+        : (Array.isArray(contract.conditions) ? contract.conditions : []);
+
+      const normalizedContractType = normalizeDeliveryShipmentType(rawContractType);
+
+      const hasDeliveryShipmentCondition = conditions.some((condition) => {
+        if (!condition || typeof condition !== 'object') {
+          return false;
+        }
+        return isDeliveryShipmentType(condition.Type || condition.type);
+      });
+
+      if (!normalizedContractType && !hasDeliveryShipmentCondition) {
+        return;
+      }
+
+      conditions.forEach((condition) => {
+        if (!condition || typeof condition !== 'object') {
+          return;
+        }
+
+        const rawConditionType = condition.Type || condition.type || null;
+        const normalizedConditionType = normalizeDeliveryShipmentType(rawConditionType);
+        if (!normalizedConditionType) {
+          return;
+        }
+
+        const rawShipmentItemId = condition.ShipmentItemId
+          || condition.ShipmentItemID
+          || condition.MaterialId
+          || condition.MaterialID
+          || null;
+        const normalizedShipmentItemId = normalizeLookupKey(rawShipmentItemId);
+        if (!normalizedShipmentItemId) {
+          return;
+        }
+
+        const conditionEntry = {
+          contractId,
+          contractLocalId,
+          contractStatus,
+          partnerName,
+          partnerCode,
+          contractType: normalizedContractType ?? (typeof rawContractType === 'string' ? rawContractType : null),
+          contractTypeNormalized: normalizedContractType,
+          dueDateEpochMs: dueDateEpochMs != null ? dueDateEpochMs : null,
+          timestampEpochMs: contractTimestamp,
+          conditionId: condition.ConditionId || condition.conditionId || null,
+          conditionType: normalizedConditionType,
+          conditionTypeRaw: typeof rawConditionType === 'string' ? rawConditionType : null,
+          conditionStatus: condition.Status || condition.status || null,
+          conditionIndex: toNumericValue(condition.ConditionIndex ?? condition.conditionIndex),
+          destination: condition.Destination || condition.destination || null,
+          party: condition.Party || condition.party || null,
+          weight: toNumericValue(condition.Weight ?? condition.weight),
+          volume: toNumericValue(condition.Volume ?? condition.volume),
+          deadlineEpochMs: toNumericValue(condition.DeadlineEpochMs ?? condition.deadlineEpochMs),
+          dependencies: Array.isArray(condition.Dependencies)
+            ? condition.Dependencies
+            : (Array.isArray(condition.dependencies) ? condition.dependencies : []),
+          condition
+        };
+
+        const existingEntries = map.get(normalizedShipmentItemId);
+        if (existingEntries) {
+          existingEntries.push(conditionEntry);
+        } else {
+          map.set(normalizedShipmentItemId, [conditionEntry]);
+        }
+      });
+    });
+
+    map.forEach((entries) => {
+      entries.sort((a, b) => {
+        const indexA = Number.isFinite(a.conditionIndex) ? a.conditionIndex : Number.POSITIVE_INFINITY;
+        const indexB = Number.isFinite(b.conditionIndex) ? b.conditionIndex : Number.POSITIVE_INFINITY;
+        if (indexA !== indexB) {
+          return indexA - indexB;
+        }
+        const typeA = (a.conditionType || '').toString();
+        const typeB = (b.conditionType || '').toString();
+        return typeA.localeCompare(typeB);
+      });
+
+    });
+
+    return map;
+  }, [contracts]);
 
   const shipLoadInfo = useMemo(() => {
     const map = new Map();
@@ -496,6 +649,84 @@ const DataPointOverlay = ({ mapRef }) => {
 
       const shipStorageSource = ship.Storage && typeof ship.Storage === 'object' ? ship.Storage : null;
 
+      const shipments = [];
+      const seenShipmentKeys = new Set();
+
+      const collectShipmentsFromRecord = (record) => {
+        if (!record || typeof record !== 'object') {
+          return;
+        }
+
+        const items = Array.isArray(record.StorageItems)
+          ? record.StorageItems
+          : (Array.isArray(record.Items) ? record.Items : []);
+
+        items.forEach((item, index) => {
+          if (!item || typeof item !== 'object') {
+            return;
+          }
+
+          const candidateIds = [
+            item.ShipmentItemId,
+            item.ShipmentItemID,
+            item.MaterialId,
+            item.MaterialID,
+            item.ItemId,
+            item.ItemID,
+            item.Id,
+            item.ID
+          ];
+
+          let matchedKey = null;
+          let matchedContracts = null;
+
+          for (const candidateId of candidateIds) {
+            const normalizedCandidate = normalizeLookupKey(candidateId);
+            if (!normalizedCandidate) {
+              continue;
+            }
+            if (shipmentContractsByItemId.has(normalizedCandidate)) {
+              matchedKey = normalizedCandidate;
+              matchedContracts = shipmentContractsByItemId.get(normalizedCandidate).map((entry) => ({
+                ...entry
+              }));
+              break;
+            }
+          }
+
+          const dedupeKey = matchedKey
+            || normalizeLookupKey(item.MaterialId)
+            || normalizeLookupKey(item.ShipmentItemId)
+            || `${normalizeLookupKey(record.StorageId || record.Id || record.Name || 'record')}::${index}`;
+
+          if (dedupeKey && seenShipmentKeys.has(dedupeKey)) {
+            return;
+          }
+
+          const itemTypeRaw = typeof item.Type === 'string' ? item.Type.toLowerCase() : '';
+          const isLikelyShipment = itemTypeRaw.includes('shipment');
+
+          if (!matchedContracts && !isLikelyShipment) {
+            return;
+          }
+
+          if (dedupeKey) {
+            seenShipmentKeys.add(dedupeKey);
+          }
+
+          shipments.push({
+            storageItem: item,
+            shipmentItemKey: matchedKey,
+            contractMatches: matchedContracts || [],
+            source: {
+              storageId: record.StorageId || record.Id || null,
+              name: record.Name || record.StorageName || null,
+              type: record.Type || null
+            }
+          });
+        });
+      };
+
       const volumeCapacitySources = [storageRecord, shipStorageSource, ship];
       const weightCapacitySources = [storageRecord, shipStorageSource, ship];
       const volumeLoadSources = [storageRecord, shipStorageSource, ship];
@@ -549,12 +780,16 @@ const DataPointOverlay = ({ mapRef }) => {
       const normalizedVolumeLoad = Number.isFinite(volumeLoad) ? volumeLoad : null;
       const normalizedWeightLoad = Number.isFinite(weightLoad) ? weightLoad : null;
 
+      collectShipmentsFromRecord(storageRecord);
+      collectShipmentsFromRecord(shipStorageSource);
+
       if (!storageRecord
         && normalizedVolumeCapacity == null
         && normalizedWeightCapacity == null
         && normalizedVolumeLoad == null
         && normalizedWeightLoad == null
-        && ratio == null) {
+        && ratio == null
+        && shipments.length === 0) {
         return;
       }
 
@@ -578,7 +813,8 @@ const DataPointOverlay = ({ mapRef }) => {
         weightLoad: derivedWeightLoad,
         volumeRatio: volumeRatio != null ? Math.max(0, volumeRatio) : null,
         weightRatio: weightRatio != null ? Math.max(0, weightRatio) : null,
-        ratio: ratio != null ? Math.max(0, ratio) : null
+        ratio: ratio != null ? Math.max(0, ratio) : null,
+        shipments
       };
 
       allLookupCandidates.forEach((candidate) => {
@@ -592,7 +828,7 @@ const DataPointOverlay = ({ mapRef }) => {
     (ships || []).forEach(considerShip);
 
     return map;
-  }, [ships, storageIndex]);
+  }, [ships, storageIndex, shipmentContractsByItemId]);
 
   const getShipLoadInfoById = useCallback((candidate) => {
     const normalized = normalizeLookupKey(candidate);
@@ -615,44 +851,197 @@ const DataPointOverlay = ({ mapRef }) => {
   const buildLoadSummary = useCallback((info) => {
     if (!info) return null;
 
-    const entries = [];
+    const ratioCandidates = [info.ratio, info.volumeRatio, info.weightRatio]
+      .map((value) => (Number.isFinite(value) ? Math.max(0, value) : null))
+      .filter((value) => value != null);
 
-    if (info.volumeCapacity != null) {
-      const loadText = info.volumeLoad != null ? formatCapacityValue(info.volumeLoad) : 'Unknown';
-      const capacityText = formatCapacityValue(info.volumeCapacity);
-      const ratioValue = info.volumeRatio != null && Number.isFinite(info.volumeRatio)
-        ? Math.max(0, info.volumeRatio)
-        : null;
-      const ratioText = ratioValue != null
-        ? ` (${(ratioValue * 100).toFixed(1)}%)${ratioValue > 1 ? ' Over' : ''}`
-        : '';
-      entries.push(`Vol ${loadText} / ${capacityText}${ratioText}`);
-    }
-
-    if (info.weightCapacity != null) {
-      const loadText = info.weightLoad != null ? formatCapacityValue(info.weightLoad) : 'Unknown';
-      const capacityText = formatCapacityValue(info.weightCapacity);
-      const ratioValue = info.weightRatio != null && Number.isFinite(info.weightRatio)
-        ? Math.max(0, info.weightRatio)
-        : null;
-      const ratioText = ratioValue != null
-        ? ` (${(ratioValue * 100).toFixed(1)}%)${ratioValue > 1 ? ' Over' : ''}`
-        : '';
-      entries.push(`Wt ${loadText} / ${capacityText}${ratioText}`);
-    }
-
-    if (entries.length > 0) {
-      const uniqueEntries = Array.from(new Set(entries));
-      return uniqueEntries.join(' · ');
-    }
-
-    if (info.ratio != null && Number.isFinite(info.ratio)) {
-      const ratioValue = Math.max(0, info.ratio);
+    if (ratioCandidates.length > 0) {
+      const ratioValue = Math.max(...ratioCandidates);
+      const clamped = Math.min(ratioValue, 1);
       const overSuffix = ratioValue > 1 ? ' (Over)' : '';
-      return `Utilization: ${(ratioValue * 100).toFixed(1)}%${overSuffix}`;
+      return `Util ${(clamped * 100).toFixed(1)}%${overSuffix}`;
     }
 
     return null;
+  }, []);
+
+  const buildShipmentTiles = useCallback((info) => {
+    if (!info?.shipments?.length) {
+      return [];
+    }
+
+    const weightKeySet = new Set([
+      'weight',
+      'totalweight',
+      'materialweight',
+      'shipmentweight',
+      'expectedweight',
+      'payloadweight',
+      'mass'
+    ]);
+
+    const volumeKeySet = new Set([
+      'volume',
+      'totalvolume',
+      'materialvolume',
+      'shipmentvolume',
+      'expectedvolume',
+      'payloadvolume',
+      'space'
+    ]);
+
+    const pickFromObject = (source, keySet) => {
+      if (!source || typeof source !== 'object' || Array.isArray(source)) {
+        return null;
+      }
+
+      for (const [key, value] of Object.entries(source)) {
+        const normalizedKey = key.trim().toLowerCase();
+        if (!keySet.has(normalizedKey)) {
+          continue;
+        }
+
+        const numeric = toNumericValue(value);
+        if (numeric != null && Math.abs(numeric) > 0) {
+          return numeric;
+        }
+      }
+
+      return null;
+    };
+
+    const deepSearchForMetric = (root, keySet) => {
+      if (!root || typeof root !== 'object') {
+        return null;
+      }
+
+      const visited = new Set();
+      const stack = [root];
+
+      while (stack.length > 0) {
+        const current = stack.pop();
+
+        if (!current || typeof current !== 'object') {
+          continue;
+        }
+
+        if (visited.has(current)) {
+          continue;
+        }
+
+        visited.add(current);
+
+        const direct = pickFromObject(current, keySet);
+        if (direct != null) {
+          return direct;
+        }
+
+        if (Array.isArray(current)) {
+          for (let i = 0; i < current.length; i += 1) {
+            stack.push(current[i]);
+          }
+        } else {
+          Object.values(current).forEach((child) => {
+            if (child && typeof child === 'object') {
+              stack.push(child);
+            }
+          });
+        }
+      }
+
+      return null;
+    };
+
+    const resolveMetric = (matchEntry, keySet, storageFallbackCandidates) => {
+      const entry = (matchEntry && typeof matchEntry === 'object') ? matchEntry : null;
+
+      const fromMatch = pickFromObject(entry, keySet);
+      if (fromMatch != null) {
+        return fromMatch;
+      }
+
+      const fromCondition = pickFromObject(entry?.condition, keySet);
+      if (fromCondition != null) {
+        return fromCondition;
+      }
+
+      const deepCondition = deepSearchForMetric(entry?.condition, keySet);
+      if (deepCondition != null) {
+        return deepCondition;
+      }
+
+      const deepMatch = deepSearchForMetric(entry, keySet);
+      if (deepMatch != null) {
+        return deepMatch;
+      }
+
+      for (const candidate of storageFallbackCandidates) {
+        const numericCandidate = toNumericValue(candidate);
+        if (numericCandidate != null && Math.abs(numericCandidate) > 0) {
+          return numericCandidate;
+        }
+      }
+
+      return null;
+    };
+
+    return info.shipments.reduce((acc, shipment, index) => {
+      if (!shipment || typeof shipment !== 'object') {
+        return acc;
+      }
+
+      const matches = Array.isArray(shipment.contractMatches) ? shipment.contractMatches : [];
+      const deliveryMatches = matches.filter((match) => {
+        const typeCandidate = match?.conditionType
+          ?? match?.conditionTypeRaw
+          ?? match?.condition?.Type
+          ?? match?.condition?.type;
+        return isDeliveryShipmentType(typeCandidate);
+      });
+
+      if (deliveryMatches.length === 0) {
+        return acc;
+      }
+
+      const preferredMatch = deliveryMatches[0];
+      const contractLocalId = preferredMatch?.contractLocalId || preferredMatch?.contractId || shipment.shipmentItemKey;
+      const contractLabel = contractLocalId != null ? String(contractLocalId) : `Shipment ${index + 1}`;
+
+      const destination = preferredMatch?.destination
+        || preferredMatch?.party
+        || shipment.source?.name
+        || 'Unknown destination';
+
+      const weightValue = resolveMetric(preferredMatch, weightKeySet, [
+        shipment.storageItem?.TotalWeight,
+        shipment.storageItem?.MaterialWeight,
+        shipment.storageItem?.Weight
+      ]);
+
+      const volumeValue = resolveMetric(preferredMatch, volumeKeySet, [
+        shipment.storageItem?.TotalVolume,
+        shipment.storageItem?.MaterialVolume,
+        shipment.storageItem?.Volume
+      ]);
+
+      const weightText = weightValue != null ? formatCapacityValue(weightValue) : '—';
+      const volumeText = volumeValue != null ? formatCapacityValue(volumeValue) : '—';
+
+      acc.push({
+        id: shipment.shipmentItemKey || `${index}`,
+        contractId: contractLabel,
+        destination: String(destination),
+        weightText,
+        volumeText,
+        lines: [
+          `Contract ${contractLabel}`,
+          `Wt ${weightText} · Vol ${volumeText}`,
+          `Dest ${String(destination)}`
+        ]
+      });
+
+      return acc;
+    }, []);
   }, [formatCapacityValue]);
 
   const getLoadColorForRatio = useCallback((ratio) => {
@@ -1946,14 +2335,6 @@ const DataPointOverlay = ({ mapRef }) => {
         const shipStyle = classifyShipType(ship, flightShipIdStr);
         const pathColor = shipStyle.color;
         const shipTypeLabel = shipStyle.label;
-        const capacityParts = [];
-        if (shipStyle.weightCapacity != null && Number.isFinite(shipStyle.weightCapacity)) {
-          capacityParts.push(`Wt ${formatCapacityValue(shipStyle.weightCapacity)}`);
-        }
-        if (shipStyle.volumeCapacity != null && Number.isFinite(shipStyle.volumeCapacity)) {
-          capacityParts.push(`Vol ${formatCapacityValue(shipStyle.volumeCapacity)}`);
-        }
-        const capacityText = capacityParts.length > 0 ? capacityParts.join(' · ') : null;
         const loadInfo = shipStyle.loadInfo;
         const originLabelLocation = deriveLocationFromLabel(flight.Origin);
         const destinationLabelLocation = deriveLocationFromLabel(flight.Destination);
@@ -2281,6 +2662,7 @@ const DataPointOverlay = ({ mapRef }) => {
             const etaText = finalArrivalEpoch != null ? formatEpoch(finalArrivalEpoch) : 'Unknown';
 
             const loadSummary = buildLoadSummary(loadInfo);
+            const shipmentTiles = buildShipmentTiles(loadInfo);
             const loadBarDescriptors = buildLoadBarDescriptors(loadInfo);
 
             const label = markerGroup.append('text')
@@ -2343,6 +2725,40 @@ const DataPointOverlay = ({ mapRef }) => {
                   background,
                   fill,
                   label: labelNode
+                };
+              });
+            }
+
+            let shipmentTilesContainer = null;
+            let shipmentTileEntries = [];
+
+            if (shipmentTiles.length > 0) {
+              shipmentTilesContainer = markerGroup.append('g')
+                .attr('class', 'ship-shipment-tiles')
+                .style('pointer-events', 'none')
+                .style('display', 'none');
+
+              shipmentTileEntries = shipmentTiles.map((tile) => {
+                const tileGroup = shipmentTilesContainer.append('g')
+                  .attr('class', 'ship-shipment-tile');
+
+                const background = tileGroup.append('rect')
+                  .attr('class', 'ship-shipment-tile-bg');
+
+                const textNode = tileGroup.append('text')
+                  .attr('class', 'ship-shipment-tile-text')
+                  .attr('text-anchor', 'start')
+                  .attr('dominant-baseline', 'hanging')
+                  .attr('font-weight', 500);
+
+                const lineTspans = tile.lines.map((line) => textNode.append('tspan').text(line));
+
+                return {
+                  tile,
+                  group: tileGroup,
+                  background,
+                  text: textNode,
+                  lineTspans
                 };
               });
             }
@@ -2418,6 +2834,67 @@ const DataPointOverlay = ({ mapRef }) => {
                 });
               }
 
+              if (shipmentTilesContainer && shipmentTileEntries.length > 0) {
+                const tilePaddingX = Math.max(6 / effectiveZoom, 3);
+                const tilePaddingY = Math.max(4 / effectiveZoom, 2);
+                const tileGap = Math.max(labelPaddingY, 4 / effectiveZoom);
+                const tileRadius = Math.max(4 / effectiveZoom, 2);
+                const textFontSize = Math.max(9 / effectiveZoom, 5.5);
+                const tileLineHeight = Math.max(baseFontSize * 1.05, 9 / effectiveZoom);
+                const tileX = bbox.x;
+                let currentY = Math.max(maxY + tileGap, bbox.y + bbox.height + tileGap);
+
+                shipmentTileEntries.forEach((entry) => {
+                  entry.group.attr('transform', `translate(${tileX}, ${currentY})`);
+
+                  entry.text
+                    .attr('x', tilePaddingX)
+                    .attr('y', tilePaddingY)
+                    .attr('fill', '#e0f2fe')
+                    .attr('font-size', `${textFontSize}px`);
+
+                  entry.lineTspans.forEach((tspanNode, idx) => {
+                    tspanNode
+                      .attr('x', tilePaddingX)
+                      .attr('dy', idx === 0 ? 0 : tileLineHeight)
+                      .attr('fill', idx === 0 ? '#facc15' : (idx === 1 ? '#bae6fd' : '#cbd5f5'))
+                      .attr('font-weight', idx === 0 ? 700 : (idx === 1 ? 600 : 500))
+                      .text(entry.tile.lines[idx]);
+                  });
+
+                  const textNode = entry.text.node();
+                  const textBBox = textNode && typeof textNode.getBBox === 'function'
+                    ? textNode.getBBox()
+                    : null;
+
+                  const tileWidth = textBBox
+                    ? Math.max(bbox.width, textBBox.width + tilePaddingX * 2)
+                    : Math.max(bbox.width, 90 / effectiveZoom);
+                  const tileHeight = textBBox
+                    ? textBBox.height + tilePaddingY * 2
+                    : tilePaddingY * 2 + tileLineHeight * entry.tile.lines.length;
+
+                  entry.background
+                    .attr('x', 0)
+                    .attr('y', 0)
+                    .attr('width', tileWidth)
+                    .attr('height', tileHeight)
+                    .attr('rx', tileRadius)
+                    .attr('ry', tileRadius)
+                    .attr('fill', 'rgba(12, 25, 46, 0.92)')
+                    .attr('stroke', '#3b82f6')
+                    .attr('stroke-width', 0.75 / effectiveZoom)
+                    .attr('opacity', 0.95);
+
+                  minX = Math.min(minX, tileX);
+                  maxX = Math.max(maxX, tileX + tileWidth);
+                  const tileBottom = currentY + tileHeight;
+                  maxY = Math.max(maxY, tileBottom);
+
+                  currentY = tileBottom + tileGap;
+                });
+              }
+
               labelBackground
                 .attr('x', minX - labelPaddingX)
                 .attr('y', minY - labelPaddingY)
@@ -2432,9 +2909,7 @@ const DataPointOverlay = ({ mapRef }) => {
               .attr('font-weight', 700)
               .text(shipDisplayName);
 
-            const typeDescription = capacityText
-              ? `${shipTypeLabel} · ${capacityText}`
-              : shipTypeLabel;
+            const typeDescription = shipTypeLabel;
 
             const typeTspan = label.append('tspan')
               .attr('x', labelX)
@@ -2490,6 +2965,9 @@ const DataPointOverlay = ({ mapRef }) => {
               if (loadBarsContainer) {
                 loadBarsContainer.style('display', null);
               }
+              if (shipmentTilesContainer) {
+                shipmentTilesContainer.style('display', null);
+              }
               updateInfoLayout();
             };
 
@@ -2498,6 +2976,9 @@ const DataPointOverlay = ({ mapRef }) => {
               labelBackground.style('display', 'none');
               if (loadBarsContainer) {
                 loadBarsContainer.style('display', 'none');
+              }
+              if (shipmentTilesContainer) {
+                shipmentTilesContainer.style('display', 'none');
               }
               if (!labelsEnabled) {
                 label.style('display', 'none');
@@ -2521,16 +3002,6 @@ const DataPointOverlay = ({ mapRef }) => {
       });
     }
 
-    if (flightDiagnostics.length > 0) {
-      // eslint-disable-next-line no-console
-      console.debug('[idle-debug][flight-evaluation]', flightDiagnostics);
-    }
-
-    if (activeShipIds.size > 0) {
-      // eslint-disable-next-line no-console
-      console.debug('[idle-debug][active-ship-ids]', Array.from(activeShipIds));
-    }
-
     if (graph && (ships?.length > 0 || flights?.length > 0)) {
       (ships || []).forEach((ship) => {
         const shipKey = ship?.ShipId || ship?.Id || ship?.Ship || ship?.Registration || ship?.Name;
@@ -2544,11 +3015,6 @@ const DataPointOverlay = ({ mapRef }) => {
         }
 
         if (activeShipIds.has(shipIdStr)) {
-          // eslint-disable-next-line no-console
-          console.debug('[idle-debug][skip-active]', {
-            ship: describeShip(ship),
-            shipId: shipIdStr
-          });
           return;
         }
 
@@ -2556,25 +3022,11 @@ const DataPointOverlay = ({ mapRef }) => {
         const idleLocationDetails = getShipLocationDetails(ship, locationSystemId);
         const effectiveSystemId = idleLocationDetails?.systemId || locationSystemId;
         if (!effectiveSystemId) {
-          // eslint-disable-next-line no-console
-          console.debug('[idle-debug][skip-no-system]', {
-            ship: describeShip(ship),
-            shipId: shipIdStr,
-            locationSystemId,
-            idleLocationDetails
-          });
           return;
         }
 
         const systemCenter = getSystemCenter(effectiveSystemId);
         if (!systemCenter) {
-          // eslint-disable-next-line no-console
-          console.debug('[idle-debug][skip-no-center]', {
-            ship: describeShip(ship),
-            shipId: shipIdStr,
-            effectiveSystemId,
-            idleLocationDetails
-          });
           return;
         }
 
@@ -2601,26 +3053,11 @@ const DataPointOverlay = ({ mapRef }) => {
           || effectiveSystemId
           || 'Unknown';
         const shipDisplayName = ship.Name || ship.ShipName || ship.ShipId || 'Unknown';
-        // eslint-disable-next-line no-console
-        console.debug('[idle-debug][render-idle]', {
-          ship: describeShip(ship),
-          shipId: shipIdStr,
-          effectiveSystemId,
-          locationSystemId,
-          locationName
-        });
         const statusLabel = `Idle at ${locationName}`;
         const shipTypeLabel = shipStyle.label;
-        const capacityParts = [];
-        if (shipStyle.weightCapacity != null && Number.isFinite(shipStyle.weightCapacity)) {
-          capacityParts.push(`Wt ${formatCapacityValue(shipStyle.weightCapacity)}`);
-        }
-        if (shipStyle.volumeCapacity != null && Number.isFinite(shipStyle.volumeCapacity)) {
-          capacityParts.push(`Vol ${formatCapacityValue(shipStyle.volumeCapacity)}`);
-        }
-        const capacityText = capacityParts.length > 0 ? capacityParts.join(' · ') : null;
         const loadInfo = shipStyle.loadInfo;
         const loadSummary = buildLoadSummary(loadInfo);
+        const shipmentTiles = buildShipmentTiles(loadInfo);
         const loadBarDescriptors = buildLoadBarDescriptors(loadInfo);
         const timeRemainingText = '—';
         const etaText = '—';
@@ -2709,6 +3146,40 @@ const DataPointOverlay = ({ mapRef }) => {
           });
         }
 
+        let shipmentTilesContainer = null;
+        let shipmentTileEntries = [];
+
+        if (shipmentTiles.length > 0) {
+          shipmentTilesContainer = markerGroup.append('g')
+            .attr('class', 'ship-shipment-tiles')
+            .style('pointer-events', 'none')
+            .style('display', 'none');
+
+          shipmentTileEntries = shipmentTiles.map((tile) => {
+            const tileGroup = shipmentTilesContainer.append('g')
+              .attr('class', 'ship-shipment-tile');
+
+            const background = tileGroup.append('rect')
+              .attr('class', 'ship-shipment-tile-bg');
+
+            const textNode = tileGroup.append('text')
+              .attr('class', 'ship-shipment-tile-text')
+              .attr('text-anchor', 'start')
+              .attr('dominant-baseline', 'hanging')
+              .attr('font-weight', 500);
+
+            const lineTspans = tile.lines.map((line) => textNode.append('tspan').text(line));
+
+            return {
+              tile,
+              group: tileGroup,
+              background,
+              text: textNode,
+              lineTspans
+            };
+          });
+        }
+
         const updateInfoLayout = () => {
           const labelNode = label.node();
           if (!labelNode) return;
@@ -2780,6 +3251,67 @@ const DataPointOverlay = ({ mapRef }) => {
             });
           }
 
+          if (shipmentTilesContainer && shipmentTileEntries.length > 0) {
+            const tilePaddingX = Math.max(6 / effectiveZoom, 3);
+            const tilePaddingY = Math.max(4 / effectiveZoom, 2);
+            const tileGap = Math.max(labelPaddingY, 4 / effectiveZoom);
+            const tileRadius = Math.max(4 / effectiveZoom, 2);
+            const textFontSize = Math.max(9 / effectiveZoom, 5.5);
+            const tileLineHeight = Math.max(baseFontSize * 1.05, 9 / effectiveZoom);
+            const tileX = bbox.x;
+            let currentY = Math.max(maxY + tileGap, bbox.y + bbox.height + tileGap);
+
+            shipmentTileEntries.forEach((entry) => {
+              entry.group.attr('transform', `translate(${tileX}, ${currentY})`);
+
+              entry.text
+                .attr('x', tilePaddingX)
+                .attr('y', tilePaddingY)
+                .attr('fill', '#e0f2fe')
+                .attr('font-size', `${textFontSize}px`);
+
+              entry.lineTspans.forEach((tspanNode, idx) => {
+                tspanNode
+                  .attr('x', tilePaddingX)
+                  .attr('dy', idx === 0 ? 0 : tileLineHeight)
+                  .attr('fill', idx === 0 ? '#facc15' : (idx === 1 ? '#bae6fd' : '#cbd5f5'))
+                  .attr('font-weight', idx === 0 ? 700 : (idx === 1 ? 600 : 500))
+                  .text(entry.tile.lines[idx]);
+              });
+
+              const textNode = entry.text.node();
+              const textBBox = textNode && typeof textNode.getBBox === 'function'
+                ? textNode.getBBox()
+                : null;
+
+              const tileWidth = textBBox
+                ? Math.max(bbox.width, textBBox.width + tilePaddingX * 2)
+                : Math.max(bbox.width, 90 / effectiveZoom);
+              const tileHeight = textBBox
+                ? textBBox.height + tilePaddingY * 2
+                : tilePaddingY * 2 + tileLineHeight * entry.tile.lines.length;
+
+              entry.background
+                .attr('x', 0)
+                .attr('y', 0)
+                .attr('width', tileWidth)
+                .attr('height', tileHeight)
+                .attr('rx', tileRadius)
+                .attr('ry', tileRadius)
+                .attr('fill', 'rgba(12, 25, 46, 0.92)')
+                .attr('stroke', '#3b82f6')
+                .attr('stroke-width', 0.75 / effectiveZoom)
+                .attr('opacity', 0.95);
+
+              minX = Math.min(minX, tileX);
+              maxX = Math.max(maxX, tileX + tileWidth);
+              const tileBottom = currentY + tileHeight;
+              maxY = Math.max(maxY, tileBottom);
+
+              currentY = tileBottom + tileGap;
+            });
+          }
+
           labelBackground
             .attr('x', minX - labelPaddingX)
             .attr('y', minY - labelPaddingY)
@@ -2794,9 +3326,7 @@ const DataPointOverlay = ({ mapRef }) => {
           .attr('font-weight', 700)
           .text(shipDisplayName);
 
-        const typeDescription = capacityText
-          ? `${shipTypeLabel} · ${capacityText}`
-          : shipTypeLabel;
+        const typeDescription = shipTypeLabel;
 
         const typeTspan = label.append('tspan')
           .attr('x', labelX)
@@ -2853,6 +3383,9 @@ const DataPointOverlay = ({ mapRef }) => {
           if (loadBarsContainer) {
             loadBarsContainer.style('display', null);
           }
+          if (shipmentTilesContainer) {
+            shipmentTilesContainer.style('display', null);
+          }
           updateInfoLayout();
         };
 
@@ -2861,6 +3394,9 @@ const DataPointOverlay = ({ mapRef }) => {
           labelBackground.style('display', 'none');
           if (loadBarsContainer) {
             loadBarsContainer.style('display', 'none');
+          }
+          if (shipmentTilesContainer) {
+            shipmentTilesContainer.style('display', 'none');
           }
           if (!labelsEnabled) {
             label.style('display', 'none');
@@ -3028,7 +3564,7 @@ const DataPointOverlay = ({ mapRef }) => {
       addBarHoverEffects(densityBar, 'Density', density, densityColorScale);
       addBarHoverEffects(luminosityBar, 'Luminosity', luminosity, luminosityColorScale);
     });
-  }, [mapRef, isOverlayVisible, isLoading, error, meteorDensityData, luminosityData, systemNames, maxValues, ships, flights, graph, selectedShipId, planetLookups, systemLookups, showShipLabels, getShipLoadInfoById, getLoadColorForRatio, buildLoadSummary, buildLoadBarDescriptors, formatCapacityValue]);
+  }, [mapRef, isOverlayVisible, isLoading, error, meteorDensityData, luminosityData, systemNames, maxValues, ships, flights, graph, selectedShipId, planetLookups, systemLookups, showShipLabels, getShipLoadInfoById, getLoadColorForRatio, buildLoadSummary, buildShipmentTiles, buildLoadBarDescriptors, formatCapacityValue]);
 
   useEffect(() => {
     renderOverlay();

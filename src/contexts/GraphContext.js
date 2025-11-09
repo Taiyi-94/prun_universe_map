@@ -19,6 +19,7 @@ export const GraphProvider = ({ children }) => {
   const [ships, setShips] = useState([]);
   const [flights, setFlights] = useState([]);
   const [storageData, setStorageData] = useState([]);
+  const [contracts, setContracts] = useState([]);
   const { authToken } = useContext(AuthContext);
 
   useEffect(() => {
@@ -85,6 +86,7 @@ export const GraphProvider = ({ children }) => {
       setShips([]);
       setFlights([]);
       setStorageData([]);
+      setContracts([]);
       return () => {
         isMounted = false;
       };
@@ -95,6 +97,8 @@ export const GraphProvider = ({ children }) => {
     if (!headerValue) {
       setShips([]);
       setFlights([]);
+      setStorageData([]);
+      setContracts([]);
       return () => {
         isMounted = false;
       };
@@ -168,9 +172,33 @@ export const GraphProvider = ({ children }) => {
       }
     };
 
+    const fetchContracts = async () => {
+      try {
+        const response = await fetch('https://rest.fnar.net/contract/allcontracts', {
+          headers
+        });
+
+        if (!response.ok) {
+          throw new Error(`Contracts request failed with status ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (!isMounted) return;
+        const contractsPayload = Array.isArray(data)
+          ? data
+          : (data?.Contracts || data?.contracts || []);
+        setContracts(Array.isArray(contractsPayload) ? contractsPayload : []);
+      } catch (error) {
+        if (!isMounted) return;
+        console.error('Error fetching contracts:', error);
+        setContracts([]);
+      }
+    };
+
     fetchShips();
     fetchFlights();
     fetchStorage();
+    fetchContracts();
 
     return () => {
       isMounted = false;
@@ -197,8 +225,11 @@ export const GraphProvider = ({ children }) => {
         ships,
         flights,
         storageData,
+        contracts,
         setShips,
-        setFlights
+        setFlights,
+        setStorageData,
+        setContracts
       }}
     >
       {children}
