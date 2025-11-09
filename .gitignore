@@ -17,7 +17,6 @@ yarn-error.log*
 pnpm-debug.log*
 firebase-debug.log*
 
-
 # Local env files
 .env.local
 .env.development.local
