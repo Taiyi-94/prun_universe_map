@@ -8,12 +8,15 @@ build
 /coverage
 /prun_universe_map.tar
 .firebase/hosting.*
+/github
 
 # Logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+firebase-debug.log*
+
 
 # Local env files
 .env.local
