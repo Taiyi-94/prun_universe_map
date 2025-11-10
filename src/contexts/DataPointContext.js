@@ -28,20 +28,16 @@ export const DataPointProvider = ({ children }) => {
     const fetchOverlayData = async () => {
       try {
         setIsLoading(true);
-        const [staticResponse, freshResponse] = await Promise.all([
-          fetch('systemstars.json'),         // The old, enriched file with Luminosity/Density
-          fetch('prun_universe_data.json') // The file that will be updated weekly with fresh names
-        ]);
+        const staticResponse = await fetch('systemstars.json'); // Enriched file with Luminosity/Density and fresh names
 
-        if (!staticResponse.ok || !freshResponse.ok) {
+        if (!staticResponse.ok) {
           throw new Error('Failed to fetch all necessary system data');
         }
 
         const staticData = await staticResponse.json();
-        const freshData = await freshResponse.json();
 
         const freshSystemNamesMap = new Map(
-          freshData.map(system => [system.SystemId, system.Name])
+          staticData.map(system => [system.SystemId, system.Name])
         );
 
         const densityMap = {};

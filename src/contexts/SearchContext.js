@@ -51,16 +51,16 @@ export const SearchProvider = ({ children }) => {
     const sanitizedSearchTerm = sanitizeInput(searchTerm);
     const results = [];
     const terms = sanitizedSearchTerm.split(/\s+/)
-        .filter(term => term.length >= 2); // Only keep terms with 1 or more characters
+      .filter(term => term.length >= 2); // Only keep terms with 1 or more characters
 
     terms.forEach(term => {
       const lowerTerm = term.toLowerCase();
 
       // Search in systems
       Object.entries(universeData).forEach(([systemId, systemArray]) => {
-      let system = systemArray[0]
+        let system = systemArray[0]
         if (system.Name.toLowerCase().includes(term.toLowerCase()) ||
-            system.NaturalId.toLowerCase().includes(term.toLowerCase())) {
+          system.NaturalId.toLowerCase().includes(term.toLowerCase())) {
           results.push({ type: 'system', id: systemId });
         }
       });
@@ -69,14 +69,13 @@ export const SearchProvider = ({ children }) => {
       Object.entries(planetData).forEach(([systemId, planets]) => {
         planets.forEach(planet => {
           if (planet.PlanetName.toLowerCase().includes(lowerTerm) ||
-              planet.PlanetNaturalId.toLowerCase().includes(lowerTerm)) {
+            planet.PlanetNaturalId.toLowerCase().includes(lowerTerm)) {
             results.push({ type: 'planet', id: planet.PlanetNaturalId, systemId: systemId });
           }
         });
       });
     });
 
-    console.log('Results', results);
     setSearchResults(results);
     highlightSearchResults(results);
     return results;
@@ -86,7 +85,7 @@ export const SearchProvider = ({ children }) => {
   const handleMaterialSearch = useCallback((searchTerm) => {
     const sanitizedSearchTerm = sanitizeInput(searchTerm);
     const terms = sanitizedSearchTerm.split(/\s+/)
-        .filter(term => term.length >= 1); // Only keep terms with 1 or more characters
+      .filter(term => term.length >= 1); // Only keep terms with 1 or more characters
 
     let results = [];
     let matchingMaterialIds = [];
@@ -194,8 +193,8 @@ export const SearchProvider = ({ children }) => {
         (filters.planetType.includes('Gaseous') && !planet.Surface);
 
       const planetFertility =
-       (filters.planetType.includes('Fertile') && planet.Fertility > -1) ||
-       (!filters.planetType.includes('Fertile'));
+        (filters.planetType.includes('Fertile') && planet.Fertility > -1) ||
+        (!filters.planetType.includes('Fertile'));
 
       const gravityCondition =
         (filters.gravity.includes('Low') && (planet.Gravity < 0.25)) ||
@@ -228,7 +227,7 @@ export const SearchProvider = ({ children }) => {
         ));
 
       return planetTypeCondition && planetFertility && gravityCondition && temperatureCondition &&
-             pressureCondition && cogcCondition;
+        pressureCondition && cogcCondition;
     });
 
     // Remove duplicates
@@ -247,7 +246,6 @@ export const SearchProvider = ({ children }) => {
       .reduce((max, item) => item.factor > max ? item.factor : max, -Infinity);
     setSearchMaterialConcentrationMineral(highestFactorMineral)
 
-    console.log('Results', uniqueResults);
     setSearchResults(uniqueResults);
     highlightSearchResults(uniqueResults, highestFactorLiquid, highestFactorGaseous, highestFactorMineral);
     setSearchMaterial(matchingMaterialIds);
@@ -267,7 +265,7 @@ export const SearchProvider = ({ children }) => {
           planetNaturalId: planet.PlanetNaturalId,
           planetName: planet.PlanetName,
           systemId: Object.keys(planetData).find(systemId =>
-          planetData[systemId].some(p => p.PlanetNaturalId === planet.PlanetNaturalId)
+            planetData[systemId].some(p => p.PlanetNaturalId === planet.PlanetNaturalId)
           )
         }));
 

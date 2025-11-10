@@ -18,7 +18,6 @@ export const findShortestPath = (graph, system1, system2, highlightPath) => {
 
   try {
     const path = find_path(graphNodes, system1, system2);
-    console.log('Found Path:', path)
     highlightPath(path, system2);
   } catch (error) {
     console.error('Error finding path:', error);
@@ -29,7 +28,7 @@ export const findShortestPath = (graph, system1, system2, highlightPath) => {
 export const resetGraphState = (nextSelectedSystem) => {
   const svg = d3.select('#map-container svg');
   // Reset all system nodes color and stroke except the background rect and current selection
-  svg.selectAll('rect').each(function() {
+  svg.selectAll('rect').each(function () {
     const node = d3.select(this);
     const systemId = node.attr('id');
     if (systemId !== 'rect1'
@@ -37,7 +36,7 @@ export const resetGraphState = (nextSelectedSystem) => {
       && !node.classed('search-highlight')
       && !node.classed('cogc-overlay-rect')
       && !node.classed('data-overlay')
-      ) {
+    ) {
       node
         .attr('fill', colors.resetSystemFill)
         .attr('fill-opacity', colors.resetSystemFillOpacity)
@@ -47,7 +46,7 @@ export const resetGraphState = (nextSelectedSystem) => {
   });
 
   // Reset all paths color and stroke
-  svg.selectAll('path').each(function() {
+  svg.selectAll('path').each(function () {
     d3.select(this)
       .attr('stroke', colors.resetPathStroke)
       .attr('stroke-width', colors.resetPathStrokeWidth);
@@ -61,7 +60,7 @@ export const highlightPath = (path, systemSelected) => {
 
   // Highlight systems in the path
   path.forEach(system => {
-  const systemNode = d3.select(`#${CSS.escape(system)}`);
+    const systemNode = d3.select(`#${CSS.escape(system)}`);
     if (!systemNode.classed('search-highlight')) {
       systemNode
         .attr('fill', colors.systemFill)

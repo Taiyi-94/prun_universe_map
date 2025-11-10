@@ -25,10 +25,10 @@ export const GraphProvider = ({ children }) => {
   const [storageData, setStorageData] = useState([]);
   const [contracts, setContracts] = useState([]);
   const [contractSnapshot, setContractSnapshot] = useState([]);
+  const [stationData, setStationData] = useState([]);
   const { authToken, userName } = useContext(AuthContext);
 
   useEffect(() => {
-    console.log('Fetching graph data');
     fetch('graph_data.json')
       .then(response => response.json())
       .then(data => {
@@ -47,7 +47,7 @@ export const GraphProvider = ({ children }) => {
         console.error('Error fetching material data:', error);
       });
 
-    fetch('prun_universe_data.json')
+    fetch('systemstars.json')
       .then(response => response.json())
       .then(data => {
         // Group planets by SystemId
@@ -80,6 +80,16 @@ export const GraphProvider = ({ children }) => {
       })
       .catch(error => {
         console.error('Error fetching planet data:', error);
+      });
+
+    // Fetch station data
+    fetch('station_data.json')
+      .then(response => response.json())
+      .then(data => {
+        setStationData(Array.isArray(data) ? data : []);
+      })
+      .catch(error => {
+        console.error('Error fetching station data:', error);
       });
 
   }, []);
@@ -274,6 +284,7 @@ export const GraphProvider = ({ children }) => {
     storageData,
     contracts,
     contractSnapshot,
+    stationData,
     setShips,
     setFlights,
     setStorageData,
@@ -290,7 +301,8 @@ export const GraphProvider = ({ children }) => {
     flights,
     storageData,
     contracts,
-    contractSnapshot
+    contractSnapshot,
+    stationData
   ]);
 
   return (

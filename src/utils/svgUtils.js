@@ -12,7 +12,7 @@ let universeMaxConcentrations = null;
 const fetchData = async () => {
   try {
     const [universeResponse, planetResponse] = await Promise.all([
-      fetch('prun_universe_data.json'),
+      fetch('systemstars.json'),
       fetch('planet_data.json')
     ]);
     const universeJson = await universeResponse.json();
@@ -30,8 +30,6 @@ const fetchData = async () => {
     }, {});
 
     universeMaxConcentrations = calculateMaxConcentrations(Object.values(planetData).flat());
-
-    console.log('Universe and planet data loaded');
   } catch (error) {
     console.error('Error loading data:', error);
   }
@@ -73,7 +71,7 @@ const determinePlanetTier = (buildRequirements = []) => {
   const PENALTY = {
     SEA: 0,
     MCG: 0,
-    BL:  1,
+    BL: 1,
     INS: 1,
     HSE: 1,
     AEF: 1,
@@ -105,14 +103,13 @@ const createPlanetTierIndicator = (starCount) => {
   const total = 3;
   const filledStar = '★';
   const emptyStar = '☆';
-  const filled = Math.max(0, Math.min(total, starCount|0));
+  const filled = Math.max(0, Math.min(total, starCount | 0));
   const stars = filledStar.repeat(filled) + emptyStar.repeat(total - filled);
   return `<span class="planet-tier">${stars}</span>`;
 };
 
 // Function to create and show the info panel
 const showInfoPanel = (rect, x, y, searchResults, materials, isRelativeThreshold) => {
-  console.log(searchResults)
   const isPlanetInSearchResults = (planetId) => {
     return searchResults.some(result =>
       (result.type === 'planet' && result.planetId === planetId) ||
@@ -204,12 +201,12 @@ const showInfoPanel = (rect, x, y, searchResults, materials, isRelativeThreshold
             <div class="resource-item" style="display: flex; align-items: center; margin-bottom: 5px;">
               <span class="resource-name" style="margin-right: 5px;">${materialInfo.Ticker}</span>
               ${createConcentrationBar(
-                planetResource.Factor,
-                planetResource.MaterialId,
-                planetResource.ResourceType,
-                isRelativeThreshold,
-                universeMaxConcentrations
-              )}
+            planetResource.Factor,
+            planetResource.MaterialId,
+            planetResource.ResourceType,
+            isRelativeThreshold,
+            universeMaxConcentrations
+          )}
             </div>
           `;
         }
@@ -230,14 +227,14 @@ const hideInfoPanel = () => {
 
 // Function to add mouseover and mouseout events for animation
 export const addMouseEvents = (g, searchResults, materials, isRelativeThreshold) => {
-  g.selectAll('rect').each(function() {
+  g.selectAll('rect').each(function () {
     const rect = d3.select(this);
     const originalSize = { width: +rect.attr('width'), height: +rect.attr('height') };
     const originalPos = { x: +rect.attr('x'), y: +rect.attr('y') };
     let hoverTimer;
     let overlayOriginalSize, overlayOriginalPos;
 
-    rect.on('mouseover.system', function(event) {
+    rect.on('mouseover.system', function (event) {
       if (rect.attr('id') === 'rect1' || d3.select(event.target).classed('data-overlay')) return;
       rect
         .attr('fill-opacity', 1)
@@ -276,7 +273,7 @@ export const addMouseEvents = (g, searchResults, materials, isRelativeThreshold)
         showInfoPanel(rect, x, y, searchResults, materials, isRelativeThreshold);
       }, 400);
 
-    }).on('mouseout.system', function(event) {
+    }).on('mouseout.system', function (event) {
       if (rect.attr('id') === 'rect1') return;
       rect.transition()
         .duration(200)

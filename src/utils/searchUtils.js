@@ -13,7 +13,6 @@ export const clearHighlights = () => {
 };
 
 export const highlightSearchResults = (searchResults, highestFactorLiquid, highestFactorGaseous, highestFactorMineral) => {
-  console.log(highestFactorLiquid, highestFactorGaseous, highestFactorMineral)
   // Define color scales
   const colorScaleLiquid = d3.scaleLinear()
     .domain([0, highestFactorLiquid])

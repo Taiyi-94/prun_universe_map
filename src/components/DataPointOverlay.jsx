@@ -282,10 +282,12 @@ const DataPointOverlay = ({ mapRef }) => {
     planetData,
     universeData,
     storageData,
-    contracts
+    contracts,
+    stationData
   } = useContext(GraphContext);
   const [selectedShipId, setSelectedShipId] = useState('__all__');
   const [partnerFilter, setPartnerFilter] = useState('');
+  const [isShipFilterCollapsed, setIsShipFilterCollapsed] = useState(false);
   const labelsEnabled = Boolean(showShipLabels);
 
   const loadColorScale = useMemo(() => (
@@ -784,6 +786,215 @@ const DataPointOverlay = ({ mapRef }) => {
     return result;
   }, [shipLoadInfo, filterShipmentsByPartner, partnerFilterActive]);
 
+  // Compute system-level shipment counts and details
+  const systemShipmentCounts = useMemo(() => {
+    const counts = new Map();
+    const shipmentDetails = new Map(); // Map<systemId, Array<shipment info>>
+
+    // Helper to find system ID from planet natural ID
+    const findSystemIdFromPlanet = (planetNaturalId) => {
+      if (!planetNaturalId || !planetData || typeof planetData !== 'object') return null;
+
+      for (const [sysId, planets] of Object.entries(planetData)) {
+        for (const planet of planets || []) {
+          if (planet?.PlanetNaturalId === planetNaturalId) {
+            return sysId;
+          }
+        }
+      }
+      return null;
+    };
+
+    // Helper to find system ID from station using stationData
+    // Returns SystemId which matches the format used in the map
+    // Note: storage.AddressableId often matches station.WarehouseId
+    const findSystemIdFromStation = (storageId, addressableId) => {
+      if (!stationData || !Array.isArray(stationData)) return null;
+
+      // Try to match by comparing storage fields with station WarehouseId
+      for (const station of stationData) {
+        if (!station || typeof station !== 'object') continue;
+
+        // Storage AddressableId often matches station WarehouseId
+        if (addressableId && station.WarehouseId === addressableId) {
+          return station.SystemId;
+        }
+
+        // Also try matching StorageId to WarehouseId
+        if (storageId && station.WarehouseId === storageId) {
+          return station.SystemId;
+        }
+
+        // Try matching AddressableId to AddressableId (if station has it)
+        if (addressableId && station.AddressableId === addressableId) {
+          return station.SystemId;
+        }
+      }
+
+      return null;
+    };
+
+    // Helper to find system ID from warehouse/station natural ID using universeData
+    const findSystemIdFromWarehouse = (naturalId) => {
+      if (!naturalId || !universeData || typeof universeData !== 'object') return null;
+
+      const normalizedId = String(naturalId).toUpperCase().trim();
+
+      for (const [systemId, entries] of Object.entries(universeData)) {
+        if (!Array.isArray(entries)) continue;
+
+        for (const entry of entries) {
+          if (!entry || typeof entry !== 'object') continue;
+
+          const entryNaturalId = entry.NaturalId || entry.naturalId;
+          if (entryNaturalId && String(entryNaturalId).toUpperCase().trim() === normalizedId) {
+            return systemId;
+          }
+        }
+      }
+      return null;
+    };
+
+    // Helper to extract system from AddressableId (format: planet.system or station.system)
+    const extractSystemFromAddressableId = (addressableId) => {
+      if (!addressableId || typeof addressableId !== 'string') return null;
+
+      const parts = addressableId.split('.');
+      if (parts.length >= 2) {
+        // Last part is typically the system
+        return parts[parts.length - 1];
+      }
+      return null;
+    };
+
+    // Count shipments from storage (planetary storage + warehouses)
+    // Badge shows where shipments currently ARE, not where they're going
+    (storageData || []).forEach((storage) => {
+      if (!storage || typeof storage !== 'object') return;
+
+      // Find the system where this storage is located
+      let systemId = null;
+
+      // Try 1: Station data lookup (for WAREHOUSE_STORE - most accurate)
+      // Note: storage.AddressableId often matches station.WarehouseId
+      if (storage.Type === 'WAREHOUSE_STORE' || storage.Type === 'STATION_STORE') {
+        const storageId = storage.StorageId;
+        const addressableId = storage.AddressableId;
+        systemId = findSystemIdFromStation(storageId, addressableId);
+      }
+
+      // Try 2: Planet natural ID (for planetary storage)
+      if (!systemId) {
+        const planetNaturalId = storage.PlanetNaturalId;
+        if (planetNaturalId) {
+          systemId = findSystemIdFromPlanet(planetNaturalId);
+        }
+      }
+
+      // Try 3: Warehouse/Station natural ID using universeData
+      if (!systemId) {
+        const warehouseNaturalId = storage.StorageNaturalId || storage.NaturalId;
+        if (warehouseNaturalId) {
+          systemId = findSystemIdFromWarehouse(warehouseNaturalId);
+        }
+      }
+
+      // Try 4: AddressableId parsing (extract system from format like "ABC.Antares")
+      if (!systemId && storage.AddressableId) {
+        systemId = extractSystemFromAddressableId(storage.AddressableId);
+      }
+
+      // Try 5: LocationName field
+      if (!systemId && storage.LocationName) {
+        const locationParts = storage.LocationName.split('.');
+        if (locationParts.length >= 2) {
+          systemId = locationParts[locationParts.length - 1];
+        }
+      }
+
+      // Try 6: SystemId field directly
+      if (!systemId && storage.SystemId) {
+        systemId = storage.SystemId;
+      }
+
+      if (!systemId) return;
+
+      const items = Array.isArray(storage.StorageItems)
+        ? storage.StorageItems
+        : (Array.isArray(storage.Items) ? storage.Items : []);
+
+      items.forEach((item) => {
+        if (!item || typeof item !== 'object') return;
+
+        const itemTypeRaw = typeof item.Type === 'string' ? item.Type.toLowerCase() : '';
+        const isShipment = itemTypeRaw.includes('shipment');
+
+        // Also check if it's linked to a shipment contract
+        const candidateIds = [
+          item.ShipmentItemId,
+          item.ShipmentItemID,
+          item.MaterialId,
+          item.MaterialID
+        ];
+
+        let hasShipmentContract = false;
+        for (const candidateId of candidateIds) {
+          const normalized = normalizeLookupKey(candidateId);
+          if (normalized && shipmentContractsByItemId && shipmentContractsByItemId.has(normalized)) {
+            hasShipmentContract = true;
+            break;
+          }
+        }
+
+        // Count if it's a shipment type or has a shipment contract
+        if (isShipment || hasShipmentContract) {
+          const currentCount = counts.get(systemId) || 0;
+          counts.set(systemId, currentCount + 1);
+
+          // Store shipment details for tooltip
+          if (!shipmentDetails.has(systemId)) {
+            shipmentDetails.set(systemId, []);
+          }
+
+          // Find the associated contract(s) using material ID
+          let contractInfo = null;
+          for (const candidateId of candidateIds) {
+            const normalized = normalizeLookupKey(candidateId);
+            if (normalized && shipmentContractsByItemId && shipmentContractsByItemId.has(normalized)) {
+              const contractEntries = shipmentContractsByItemId.get(normalized);
+              // Get the first contract entry (they're already sorted)
+              const firstEntry = Array.isArray(contractEntries) ? contractEntries[0] : contractEntries;
+              if (firstEntry) {
+                contractInfo = {
+                  localId: firstEntry.contractLocalId,
+                  id: firstEntry.contractId,
+                  partnerName: firstEntry.partnerName,
+                  partnerCode: firstEntry.partnerCode,
+                  destination: firstEntry.destination || firstEntry.party,
+                  deadlineEpochMs: firstEntry.deadlineEpochMs,
+                  weight: firstEntry.weight,
+                  volume: firstEntry.volume
+                };
+              }
+              break;
+            }
+          }
+
+          shipmentDetails.get(systemId).push({
+            amount: item.MaterialAmount || item.Amount || 1,
+            weight: item.TotalWeight || 0,
+            volume: item.TotalVolume || 0,
+            contract: contractInfo,
+            storageType: storage.Type,
+            locationName: storage.LocationName || storage.PlanetName
+          });
+        }
+      });
+    });
+
+    return { counts, shipmentDetails };
+  }, [storageData, planetData, universeData, stationData, shipmentContractsByItemId, normalizeLookupKey]);
+
   const showNoPartnerMatches = partnerFilterActive
     && (!partnerFilteredShipments || partnerFilteredShipments.size === 0);
 
@@ -1045,6 +1256,23 @@ const DataPointOverlay = ({ mapRef }) => {
       const weightText = weightValue != null ? formatCapacityValue(weightValue) : '—';
       const volumeText = volumeValue != null ? formatCapacityValue(volumeValue) : '—';
 
+      // Calculate deadline text
+      let deadlineText = '';
+      const deadlineEpochMs = preferredMatch?.deadlineEpochMs;
+      if (deadlineEpochMs) {
+        const deadlineDate = new Date(deadlineEpochMs);
+        const now = new Date();
+        const totalHours = Math.round((deadlineDate - now) / (1000 * 60 * 60));
+        const days = Math.floor(totalHours / 24);
+        const hours = totalHours % 24;
+
+        if (days > 0) {
+          deadlineText = ` (${days}d ${hours}h)`;
+        } else {
+          deadlineText = ` (${hours}h)`;
+        }
+      }
+
       acc.push({
         id: shipment.shipmentItemKey || `${index}`,
         contractId: contractLabel,
@@ -1052,7 +1280,7 @@ const DataPointOverlay = ({ mapRef }) => {
         weightText,
         volumeText,
         lines: [
-          `Contract ${contractLabel}`,
+          `Contract ${contractLabel}${deadlineText}`,
           `Wt ${weightText} · Vol ${volumeText}`,
           `Dest ${String(destination)}`
         ]
@@ -2295,32 +2523,6 @@ const DataPointOverlay = ({ mapRef }) => {
       (flights || []).forEach((flight) => {
         const flightShipId = flight?.ShipId ?? flight?.shipId ?? flight?.Ship ?? null;
         const flightShipIdStr = flightShipId != null ? String(flightShipId) : null;
-        if (flightShipIdStr === 'GenFreight 1' || flight?.Name === 'GenFreight 1' || flight?.ShipName === 'GenFreight 6') {
-          const shipForFlight = shipsById.get(flight.ShipId) || null;
-          const hasSegments = Array.isArray(flight.Segments) && flight.Segments.length > 0;
-          const segmentSummary = hasSegments
-            ? flight.Segments.map((segment, index) => ({
-              index,
-              origin: segment?.OriginLines,
-              destination: segment?.DestinationLines,
-              dep: segment?.DepartureTimeEpochMs || segment?.DepartureEpochMs,
-              arr: segment?.ArrivalTimeEpochMs || segment?.ArrivalEpochMs
-            }))
-            : [];
-
-          // eslint-disable-next-line no-console
-          console.debug('[GenFreight 6][flight-precheck]', {
-            flightIndex: flightSegmentsCache.size,
-            flightId: flight.FlightId,
-            shipId: flightShipIdStr,
-            flightOrigin: flight.Origin,
-            flightDestination: flight.Destination,
-            shipForFlight,
-            hasSegments,
-            segmentsCount: Array.isArray(flight.Segments) ? flight.Segments.length : 0,
-            segmentSummary
-          });
-        }
 
         if (selectedShipId !== '__all__' && flightShipIdStr !== selectedShipId) {
           return;
@@ -2388,6 +2590,7 @@ const DataPointOverlay = ({ mapRef }) => {
         let previousLocation = null;
         let firstLocation = null;
         let finalLocation = null;
+        let isSTLOnly = true; // Track if this is an STL-only flight
 
         segmentsRaw.forEach((segment) => {
           const originLocation = extractLocationDetails(segment.OriginLines);
@@ -2412,6 +2615,9 @@ const DataPointOverlay = ({ mapRef }) => {
             previousLocation = destinationLocation?.systemId ? destinationLocation : effectiveTo || previousLocation;
             return;
           }
+
+          // If we reach here, there's at least one inter-system segment
+          isSTLOnly = false;
 
           const fromCenter = getSystemCenter(effectiveFrom.systemId);
           const toCenter = getSystemCenter(effectiveTo.systemId);
@@ -2455,22 +2661,29 @@ const DataPointOverlay = ({ mapRef }) => {
         };
 
         if (segmentPairs.length === 0) {
-          flightDiagnostics.push({
-            shipId: flightShipIdStr,
-            shipName: ship?.Name || ship?.ShipName || flightShipIdStr || 'Unknown',
-            flightId: flight?.FlightId ?? null,
-            state: 'skipped-no-segments'
-          });
+          // Check if this is an STL-only flight - don't skip it, let it show as idle with STL status
+          if (isSTLOnly && segmentsRaw.length > 0 && (firstLocation?.systemId || finalLocation?.systemId)) {
+            flightDiagnostics.push({
+              shipId: flightShipIdStr,
+              shipName: ship?.Name || ship?.ShipName || flightShipIdStr || 'Unknown',
+              flightId: flight?.FlightId ?? null,
+              state: 'stl-only',
+              systemId: firstLocation?.systemId || finalLocation?.systemId,
+              segments: segmentsRaw.length
+            });
+            // Don't add to activeShipIds - let it render as "idle" with STL info
+          } else {
+            flightDiagnostics.push({
+              shipId: flightShipIdStr,
+              shipName: ship?.Name || ship?.ShipName || flightShipIdStr || 'Unknown',
+              flightId: flight?.FlightId ?? null,
+              state: 'skipped-no-segments'
+            });
+          }
           return;
         }
 
         const flightTiming = computeFlightTiming(flight, segmentPairs);
-        const nowTs = Date.now();
-        const timeToleranceMs = 2 * 60 * 1000;
-        const arrivalMs = flightTiming.arrival;
-        const departureMs = flightTiming.departure;
-        const completedByTime = arrivalMs != null && arrivalMs < (nowTs - timeToleranceMs);
-        const notYetDeparted = departureMs != null && departureMs > (nowTs + timeToleranceMs);
 
         const segmentIndexCandidatesRaw = [
           flight?.CurrentSegmentIndex,
@@ -2495,45 +2708,16 @@ const DataPointOverlay = ({ mapRef }) => {
         const numericProgress = rawProgress != null ? Number(rawProgress) : null;
         const hasProgressData = rawProgress != null;
         const hasTraversalData = hasSegmentIndexData || hasProgressData;
-        const completedByProgress = numericProgress != null && numericProgress >= 0.999;
 
-        const statusRaw = flight?.Status
-          ?? flight?.FlightStatus
-          ?? flight?.State
-          ?? flight?.CurrentStatus
-          ?? ship?.Status
-          ?? ship?.ShipStatus
-          ?? ship?.State
-          ?? null;
-        const statusText = typeof statusRaw === 'string' ? statusRaw.toLowerCase() : '';
-        const completedByStatus = /arriv|dock|complete|idle|done/.test(statusText);
-
-        const isFlightActive = !notYetDeparted
-          && !completedByTime
-          && !completedByProgress
-          && !completedByStatus
-          && segmentPairs.length > 0;
-
+        // Flight data only includes active flights, so we treat all flights with segments as active
         flightDiagnostics.push({
           shipId: flightShipIdStr,
           shipName: ship?.Name || ship?.ShipName || flightShipIdStr || 'Unknown',
           flightId: flight?.FlightId ?? null,
-          state: isFlightActive ? 'active' : 'inactive',
-          arrivalMs,
-          departureMs,
-          nowTs,
+          state: 'active',
           progress: numericProgress,
-          status: statusRaw,
-          notYetDeparted,
-          completedByTime,
-          completedByProgress,
-          completedByStatus,
           segments: segmentPairs.length
         });
-
-        if (!isFlightActive) {
-          return;
-        }
 
         if (flightShipIdStr) {
           activeShipIds.add(flightShipIdStr);
@@ -2671,43 +2855,83 @@ const DataPointOverlay = ({ mapRef }) => {
 
             markerGroup.raise();
 
-            markerGroup.append('circle')
-              .attr('cx', markerX)
-              .attr('cy', markerY)
-              .attr('r', radius)
-              .attr('fill', pathColor)
+            // Create thick chevron arrow shape
+            const chevronSize = Math.max(9 / effectiveZoom, 4.5);
+            const chevronWidth = chevronSize * 0.8;
+
+            // Default direction is right if no direction provided
+            const dirX = interpolated.direction?.x || 1;
+            const dirY = interpolated.direction?.y || 0;
+
+            // Calculate angle of direction
+            const angle = Math.atan2(dirY, dirX) * (180 / Math.PI);
+
+            // Create chevron shape pointing right (will be rotated)
+            // Chevron consists of two lines forming a ">" shape
+            const halfHeight = chevronWidth / 2;
+            const chevronPath = `
+              M ${-chevronSize * 0.3} ${-halfHeight}
+              L ${chevronSize * 0.5} 0
+              L ${-chevronSize * 0.3} ${halfHeight}
+            `;
+
+            // Add white outline for visibility
+            markerGroup.append('path')
+              .attr('d', chevronPath)
+              .attr('transform', `translate(${markerX}, ${markerY}) rotate(${angle})`)
+              .attr('fill', 'none')
               .attr('stroke', '#ffffff')
-              .attr('stroke-width', Math.max(1 / effectiveZoom, 0.6))
+              .attr('stroke-width', Math.max(5 / effectiveZoom, 3.5))
+              .attr('stroke-linecap', 'round')
+              .attr('stroke-linejoin', 'round')
+              .attr('opacity', 0.8);
+
+            // Main thick chevron
+            markerGroup.append('path')
+              .attr('d', chevronPath)
+              .attr('transform', `translate(${markerX}, ${markerY}) rotate(${angle})`)
+              .attr('fill', 'none')
+              .attr('stroke', pathColor)
+              .attr('stroke-width', Math.max(3.5 / effectiveZoom, 2))
+              .attr('stroke-linecap', 'round')
+              .attr('stroke-linejoin', 'round')
               .attr('opacity', 0.95);
 
-            if (interpolated.direction) {
-              const arrowLength = Math.max(14 / effectiveZoom, 6);
-              const arrowWidth = arrowLength * 0.65;
-              const tailX = markerX + interpolated.direction.x * radius;
-              const tailY = markerY + interpolated.direction.y * radius;
-              const headX = tailX + interpolated.direction.x * arrowLength;
-              const headY = tailY + interpolated.direction.y * arrowLength;
-              const perpX = -interpolated.direction.y;
-              const perpY = interpolated.direction.x;
-              const halfWidth = arrowWidth / 2;
-              const leftX = tailX + perpX * halfWidth;
-              const leftY = tailY + perpY * halfWidth;
-              const rightX = tailX - perpX * halfWidth;
-              const rightY = tailY - perpY * halfWidth;
+            // Add shipment count badge if there are shipments
+            const shipmentCount = filteredShipments.length;
+            if (shipmentCount > 0) {
+              const badgeRadius = Math.max(7 / effectiveZoom, 4.2);
+              const badgeOffsetX = chevronSize * 1.2;
+              const badgeOffsetY = -chevronSize * 1.2;
+              const badgeFontSize = Math.max(8.4 / effectiveZoom, 5.6);
 
-              markerGroup.append('path')
-                .attr('d', `M ${headX} ${headY} L ${leftX} ${leftY} L ${rightX} ${rightY} Z`)
-                .attr('fill', pathColor)
-                .attr('stroke', '#000000')
-                .attr('stroke-width', 0.5 / effectiveZoom)
-                .attr('opacity', 0.9)
-                .style('pointer-events', 'none');
+              // Badge background circle
+              markerGroup.append('circle')
+                .attr('cx', markerX + badgeOffsetX)
+                .attr('cy', markerY + badgeOffsetY)
+                .attr('r', badgeRadius)
+                .attr('fill', '#ef4444')
+                .attr('stroke', '#ffffff')
+                .attr('stroke-width', Math.max(1.12 / effectiveZoom, 0.7))
+                .attr('opacity', 0.95);
+
+              // Badge count text
+              markerGroup.append('text')
+                .attr('x', markerX + badgeOffsetX)
+                .attr('y', markerY + badgeOffsetY)
+                .attr('text-anchor', 'middle')
+                .attr('dominant-baseline', 'central')
+                .attr('fill', '#ffffff')
+                .attr('font-size', `${badgeFontSize}px`)
+                .attr('font-weight', 700)
+                .attr('opacity', 1)
+                .text(shipmentCount > 99 ? '99+' : shipmentCount);
             }
 
-            const labelX = markerX + radius + (6 / effectiveZoom);
+            const labelX = markerX + radius + 6;
             const labelY = markerY - (radius * 0.8);
-            const baseFontSize = Math.max(8 / effectiveZoom, 5.5);
-            const lineHeight = Math.max(baseFontSize * 1.2, 9 / effectiveZoom);
+            const baseFontSize = 8;
+            const lineHeight = baseFontSize * 1.2;
 
             const shipDisplayName = ship.Name || ship.ShipName || ship.ShipId || 'Unknown';
             const preferredDestinationLocation = selectDisplayLocation(
@@ -2768,14 +2992,14 @@ const DataPointOverlay = ({ mapRef }) => {
               label.style('display', 'none');
             }
 
-            const labelPaddingX = Math.max(6 / effectiveZoom, 3);
-            const labelPaddingY = Math.max(3 / effectiveZoom, 1.5);
-            const labelCornerRadius = Math.max(4 / effectiveZoom, 2);
+            const labelPaddingX = 6;
+            const labelPaddingY = 3;
+            const labelCornerRadius = 4;
             const labelBackground = markerGroup.insert('rect', 'text')
               .attr('class', 'ship-label-background')
               .attr('fill', 'rgba(15, 23, 42, 0.85)')
               .attr('stroke', '#000000')
-              .attr('stroke-width', 0.5 / effectiveZoom)
+              .attr('stroke-width', 0.5)
               .attr('rx', labelCornerRadius)
               .attr('ry', labelCornerRadius)
               .attr('opacity', 0.95)
@@ -2861,10 +3085,10 @@ const DataPointOverlay = ({ mapRef }) => {
               let maxY = bbox.y + bbox.height;
 
               if (loadBarsContainer && loadBarEntries.length > 0) {
-                const baseBarWidth = Math.max(bbox.width, Math.max(70 / effectiveZoom, radius * 3.5));
-                const barHeight = Math.max(6 / effectiveZoom, 3);
-                const barRadius = Math.max(barHeight / 2, 2 / effectiveZoom);
-                const gap = Math.max(labelPaddingY, 4 / effectiveZoom);
+                const baseBarWidth = Math.max(bbox.width, 70);
+                const barHeight = 6;
+                const barRadius = barHeight / 2;
+                const gap = 4;
                 const barX = bbox.x;
                 let currentY = bbox.y + bbox.height + gap;
 
@@ -2883,19 +3107,19 @@ const DataPointOverlay = ({ mapRef }) => {
                     .attr('ry', barRadius)
                     .attr('fill', 'rgba(15, 23, 42, 0.85)')
                     .attr('stroke', '#0f172a')
-                    .attr('stroke-width', 0.5 / effectiveZoom)
+                    .attr('stroke-width', 0.5)
                     .attr('opacity', 0.95);
 
                   entry.fill
-                    .attr('width', Math.max(barWidth * fillRatio, Math.max(2 / effectiveZoom, 1.5)))
+                    .attr('width', Math.max(barWidth * fillRatio, 2))
                     .attr('height', barHeight)
                     .attr('rx', barRadius)
                     .attr('ry', barRadius)
                     .attr('fill', getLoadColorForRatio(ratioValue) || '#38bdf8')
                     .attr('opacity', 0.95);
 
-                  const labelFontSize = Math.max(9 / effectiveZoom, 5.5);
-                  const labelGap = Math.max(4 / effectiveZoom, 2);
+                  const labelFontSize = 9;
+                  const labelGap = 4;
                   const labelText = entry.descriptor.summary
                     || `${entry.descriptor.kindLabel} ${(Math.min(ratioValue, 1) * 100).toFixed(1)}%`;
 
@@ -2910,23 +3134,23 @@ const DataPointOverlay = ({ mapRef }) => {
                   if (index === loadBarEntries.length - 1) {
                     maxY = Math.max(maxY, barBottom);
                   } else {
-                    maxY = Math.max(maxY, barBottom + Math.max(2 / effectiveZoom, 1));
+                    maxY = Math.max(maxY, barBottom + 2);
                   }
 
                   minX = Math.min(minX, barX);
                   maxX = Math.max(maxX, barX + barWidth);
 
-                  currentY = barBottom + Math.max(2 / effectiveZoom, 1);
+                  currentY = barBottom + 2;
                 });
               }
 
               if (shipmentTilesContainer && shipmentTileEntries.length > 0) {
-                const tilePaddingX = Math.max(6 / effectiveZoom, 3);
-                const tilePaddingY = Math.max(4 / effectiveZoom, 2);
-                const tileGap = Math.max(labelPaddingY, 4 / effectiveZoom);
-                const tileRadius = Math.max(4 / effectiveZoom, 2);
-                const textFontSize = Math.max(9 / effectiveZoom, 5.5);
-                const tileLineHeight = Math.max(baseFontSize * 1.05, 9 / effectiveZoom);
+                const tilePaddingX = 6;
+                const tilePaddingY = 4;
+                const tileGap = 4;
+                const tileRadius = 4;
+                const textFontSize = 9;
+                const tileLineHeight = baseFontSize * 1.05;
                 const tileX = bbox.x;
                 let currentY = Math.max(maxY + tileGap, bbox.y + bbox.height + tileGap);
 
@@ -2955,7 +3179,7 @@ const DataPointOverlay = ({ mapRef }) => {
 
                   const tileWidth = textBBox
                     ? Math.max(bbox.width, textBBox.width + tilePaddingX * 2)
-                    : Math.max(bbox.width, 90 / effectiveZoom);
+                    : Math.max(bbox.width, 90);
                   const tileHeight = textBBox
                     ? textBBox.height + tilePaddingY * 2
                     : tilePaddingY * 2 + tileLineHeight * entry.tile.lines.length;
@@ -2969,7 +3193,7 @@ const DataPointOverlay = ({ mapRef }) => {
                     .attr('ry', tileRadius)
                     .attr('fill', 'rgba(12, 25, 46, 0.92)')
                     .attr('stroke', '#3b82f6')
-                    .attr('stroke-width', 0.75 / effectiveZoom)
+                    .attr('stroke-width', 0.75)
                     .attr('opacity', 0.95);
 
                   minX = Math.min(minX, tileX);
@@ -3071,6 +3295,19 @@ const DataPointOverlay = ({ mapRef }) => {
               }
             };
 
+            // Enable pointer events on tooltip elements to keep them visible when hovering
+            if (labelBackground) {
+              labelBackground.style('pointer-events', 'all');
+            }
+            if (loadBarsContainer) {
+              loadBarsContainer.style('pointer-events', 'all');
+            }
+            if (shipmentTilesContainer) {
+              shipmentTilesContainer.style('pointer-events', 'all');
+            }
+
+            const tooltipElements = [labelBackground, loadBarsContainer, shipmentTilesContainer].filter(Boolean);
+
             markerGroup
               .on('mouseover.shipinfo', () => {
                 showInfo();
@@ -3083,6 +3320,24 @@ const DataPointOverlay = ({ mapRef }) => {
                 }
                 hideInfo();
               });
+
+            // Keep tooltip visible when hovering over tooltip elements
+            tooltipElements.forEach(element => {
+              if (element) {
+                element
+                  .on('mouseover.tooltip', () => {
+                    showInfo();
+                  })
+                  .on('mouseout.tooltip', (event) => {
+                    const related = event.relatedTarget;
+                    const groupNode = markerGroup.node();
+                    if (related && groupNode && groupNode.contains(related)) {
+                      return;
+                    }
+                    hideInfo();
+                  });
+              }
+            });
           }
         }
       });
@@ -3096,6 +3351,7 @@ const DataPointOverlay = ({ mapRef }) => {
         }
 
         const shipIdStr = String(shipKey);
+
         if (selectedShipId !== '__all__' && shipIdStr !== selectedShipId) {
           return;
         }
@@ -3104,31 +3360,75 @@ const DataPointOverlay = ({ mapRef }) => {
           return;
         }
 
-        const locationSystemId = getShipLocationSystemId(ship);
-        const idleLocationDetails = getShipLocationDetails(ship, locationSystemId);
-        const effectiveSystemId = idleLocationDetails?.systemId || locationSystemId;
+        let locationSystemId = getShipLocationSystemId(ship);
+        let idleLocationDetails = getShipLocationDetails(ship, locationSystemId);
+        let effectiveSystemId = idleLocationDetails?.systemId || locationSystemId;
+
+        // If no location found but ship has an STL flight, get system from flight
+        if (!effectiveSystemId) {
+          const shipFlight = flightsByShipId.get(ship.ShipId) || flightsByShipId.get(ship.Id);
+          if (shipFlight && Array.isArray(shipFlight.Segments) && shipFlight.Segments.length > 0) {
+            // Extract system from flight segments
+            const firstSegment = shipFlight.Segments[0];
+            const originLocation = extractLocationDetails(firstSegment.OriginLines);
+            const destinationLocation = extractLocationDetails(firstSegment.DestinationLines);
+            const flightSystemId = originLocation?.systemId || destinationLocation?.systemId;
+            if (flightSystemId) {
+              effectiveSystemId = flightSystemId;
+              idleLocationDetails = originLocation || destinationLocation;
+            }
+          }
+        }
+
         if (!effectiveSystemId) {
           return;
         }
 
         const systemCenter = getSystemCenter(effectiveSystemId);
+
         if (!systemCenter) {
           return;
         }
 
         const effectiveZoom = Math.max(1, zoomLevel);
-        const radius = Math.max(6 / effectiveZoom, 3);
+        // Make idle ship markers 33% smaller
+        const radius = Math.max(4 / effectiveZoom, 2);
         const positionKey = `${Math.round(systemCenter.x / 5)}:${Math.round(systemCenter.y / 5)}`;
         const markerSlot = getMarkerSlot(positionKey);
-        const baseSpacing = Math.max(radius * 2.1, 6 / effectiveZoom);
 
-        let offsetX = 0;
-        let offsetY = 0;
-        if (markerSlot > 0) {
-          const angle = (markerSlot - 1) * (Math.PI / 3);
-          offsetX = Math.cos(angle) * baseSpacing;
-          offsetY = Math.sin(angle) * baseSpacing;
+        // Arrange idle ships in rings around the system marker (no center position)
+        // First ring: 8 ships, Second ring: 16 ships, etc.
+        const shipsPerRing = [8, 16, 24, 32]; // Ring sizes
+        let ringIndex = 0;
+        let positionInRing = markerSlot;
+        let cumulativeShips = 0;
+
+        // Determine which ring and position within that ring
+        for (let i = 0; i < shipsPerRing.length; i++) {
+          if (positionInRing < shipsPerRing[i]) {
+            ringIndex = i;
+            break;
+          }
+          positionInRing -= shipsPerRing[i];
+          cumulativeShips += shipsPerRing[i];
+          ringIndex = i + 1;
         }
+
+        // If we have more ships than planned rings, keep adding rings
+        if (ringIndex >= shipsPerRing.length) {
+          const extraShips = markerSlot - cumulativeShips;
+          const shipsInExtraRing = 32 + (ringIndex - shipsPerRing.length + 1) * 8;
+          positionInRing = extraShips % shipsInExtraRing;
+        }
+
+        // Arrange in a ring (no center position) - rings are closer together
+        const ringRadius = Math.max(8 / effectiveZoom, 6) * (ringIndex + 1);
+        const shipsInThisRing = ringIndex < shipsPerRing.length
+          ? shipsPerRing[ringIndex]
+          : 32 + (ringIndex - shipsPerRing.length + 1) * 8;
+        const angle = (positionInRing / shipsInThisRing) * 2 * Math.PI;
+        const offsetX = Math.cos(angle) * ringRadius;
+        const offsetY = Math.sin(angle) * ringRadius;
 
         const markerX = systemCenter.x + offsetX;
         const markerY = systemCenter.y + offsetY;
@@ -3154,7 +3454,29 @@ const DataPointOverlay = ({ mapRef }) => {
           || effectiveSystemId
           || 'Unknown';
         const shipDisplayName = ship.Name || ship.ShipName || ship.ShipId || 'Unknown';
-        const statusLabel = `Idle at ${locationName}`;
+
+        // Check if this ship has an STL flight and get destination
+        const shipFlight = flightsByShipId.get(ship.ShipId) || flightsByShipId.get(ship.Id);
+        const hasSTLFlight = shipFlight && Array.isArray(shipFlight.Segments) && shipFlight.Segments.length > 0;
+
+        let statusLabel = `Idle at ${locationName}`;
+        if (hasSTLFlight && shipFlight.Segments.length > 0) {
+          // Get the destination from the current or next segment
+          const currentSegmentIndex = shipFlight.CurrentSegmentIndex ?? 0;
+          const currentSegment = shipFlight.Segments[currentSegmentIndex];
+          if (currentSegment) {
+            const destinationLocation = extractLocationDetails(currentSegment.DestinationLines);
+            const destinationDisplay = formatLocationDisplay(destinationLocation);
+            if (destinationDisplay) {
+              statusLabel = `STL Transit to ${destinationDisplay}`;
+            } else {
+              statusLabel = `STL Transit in ${locationName}`;
+            }
+          } else {
+            statusLabel = `STL Transit in ${locationName}`;
+          }
+        }
+
         const shipTypeLabel = shipStyle.label;
         const loadSummary = buildLoadSummary(loadInfo);
         const shipmentTiles = buildShipmentTiles(loadInfoForTiles);
@@ -3177,10 +3499,41 @@ const DataPointOverlay = ({ mapRef }) => {
           .attr('stroke-width', Math.max(1 / effectiveZoom, 0.6))
           .attr('opacity', 0.95);
 
-        const labelX = markerX + radius + (6 / effectiveZoom);
+        // Add shipment count badge if there are shipments
+        const shipmentCount = filteredShipments.length;
+        if (shipmentCount > 0) {
+          const badgeRadius = Math.max(7 / effectiveZoom, 4.2);
+          const badgeOffsetX = radius * 2.0;
+          const badgeOffsetY = -radius * 2.0;
+          const badgeFontSize = Math.max(8.4 / effectiveZoom, 5.6);
+
+          // Badge background circle
+          markerGroup.append('circle')
+            .attr('cx', markerX + badgeOffsetX)
+            .attr('cy', markerY + badgeOffsetY)
+            .attr('r', badgeRadius)
+            .attr('fill', '#ef4444')
+            .attr('stroke', '#ffffff')
+            .attr('stroke-width', Math.max(1.12 / effectiveZoom, 0.7))
+            .attr('opacity', 0.95);
+
+          // Badge count text
+          markerGroup.append('text')
+            .attr('x', markerX + badgeOffsetX)
+            .attr('y', markerY + badgeOffsetY)
+            .attr('text-anchor', 'middle')
+            .attr('dominant-baseline', 'central')
+            .attr('fill', '#ffffff')
+            .attr('font-size', `${badgeFontSize}px`)
+            .attr('font-weight', 700)
+            .attr('opacity', 1)
+            .text(shipmentCount > 99 ? '99+' : shipmentCount);
+        }
+
+        const labelX = markerX + radius + 6;
         const labelY = markerY - (radius * 0.8);
-        const baseFontSize = Math.max(8 / effectiveZoom, 5.5);
-        const lineHeight = Math.max(baseFontSize * 1.2, 9 / effectiveZoom);
+        const baseFontSize = 8;
+        const lineHeight = baseFontSize * 1.2;
 
         const label = markerGroup.append('text')
           .attr('x', labelX)
@@ -3199,14 +3552,14 @@ const DataPointOverlay = ({ mapRef }) => {
           label.style('display', 'none');
         }
 
-        const labelPaddingX = Math.max(6 / effectiveZoom, 3);
-        const labelPaddingY = Math.max(3 / effectiveZoom, 1.5);
-        const labelCornerRadius = Math.max(4 / effectiveZoom, 2);
+        const labelPaddingX = 6;
+        const labelPaddingY = 3;
+        const labelCornerRadius = 4;
         const labelBackground = markerGroup.insert('rect', 'text')
           .attr('class', 'ship-label-background')
           .attr('fill', 'rgba(15, 23, 42, 0.85)')
           .attr('stroke', '#000000')
-          .attr('stroke-width', 0.5 / effectiveZoom)
+          .attr('stroke-width', 0.5)
           .attr('rx', labelCornerRadius)
           .attr('ry', labelCornerRadius)
           .attr('opacity', 0.95)
@@ -3292,10 +3645,10 @@ const DataPointOverlay = ({ mapRef }) => {
           let maxY = bbox.y + bbox.height;
 
           if (loadBarsContainer && loadBarEntries.length > 0) {
-            const baseBarWidth = Math.max(bbox.width, Math.max(70 / effectiveZoom, radius * 3.5));
-            const barHeight = Math.max(6 / effectiveZoom, 3);
-            const barRadius = Math.max(barHeight / 2, 2 / effectiveZoom);
-            const gap = Math.max(labelPaddingY, 4 / effectiveZoom);
+            const baseBarWidth = Math.max(bbox.width, 70);
+            const barHeight = 6;
+            const barRadius = barHeight / 2;
+            const gap = 4;
             const barX = bbox.x;
             let currentY = bbox.y + bbox.height + gap;
 
@@ -3314,19 +3667,19 @@ const DataPointOverlay = ({ mapRef }) => {
                 .attr('ry', barRadius)
                 .attr('fill', 'rgba(15, 23, 42, 0.85)')
                 .attr('stroke', '#0f172a')
-                .attr('stroke-width', 0.5 / effectiveZoom)
+                .attr('stroke-width', 0.5)
                 .attr('opacity', 0.95);
 
               entry.fill
-                .attr('width', Math.max(barWidth * fillRatio, Math.max(2 / effectiveZoom, 1.5)))
+                .attr('width', Math.max(barWidth * fillRatio, 2))
                 .attr('height', barHeight)
                 .attr('rx', barRadius)
                 .attr('ry', barRadius)
                 .attr('fill', getLoadColorForRatio(ratioValue) || '#38bdf8')
                 .attr('opacity', 0.95);
 
-              const labelFontSize = Math.max(9 / effectiveZoom, 5.5);
-              const labelGap = Math.max(4 / effectiveZoom, 2);
+              const labelFontSize = 9;
+              const labelGap = 4;
               const labelText = entry.descriptor.summary
                 || `${entry.descriptor.kindLabel} ${(Math.min(ratioValue, 1) * 100).toFixed(1)}%`;
 
@@ -3341,23 +3694,23 @@ const DataPointOverlay = ({ mapRef }) => {
               if (index === loadBarEntries.length - 1) {
                 maxY = Math.max(maxY, barBottom);
               } else {
-                maxY = Math.max(maxY, barBottom + Math.max(2 / effectiveZoom, 1));
+                maxY = Math.max(maxY, barBottom + 2);
               }
 
               minX = Math.min(minX, barX);
               maxX = Math.max(maxX, barX + barWidth);
 
-              currentY = barBottom + Math.max(2 / effectiveZoom, 1);
+              currentY = barBottom + 2;
             });
           }
 
           if (shipmentTilesContainer && shipmentTileEntries.length > 0) {
-            const tilePaddingX = Math.max(6 / effectiveZoom, 3);
-            const tilePaddingY = Math.max(4 / effectiveZoom, 2);
-            const tileGap = Math.max(labelPaddingY, 4 / effectiveZoom);
-            const tileRadius = Math.max(4 / effectiveZoom, 2);
-            const textFontSize = Math.max(9 / effectiveZoom, 5.5);
-            const tileLineHeight = Math.max(baseFontSize * 1.05, 9 / effectiveZoom);
+            const tilePaddingX = 6;
+            const tilePaddingY = 4;
+            const tileGap = 4;
+            const tileRadius = 4;
+            const textFontSize = 9;
+            const tileLineHeight = baseFontSize * 1.05;
             const tileX = bbox.x;
             let currentY = Math.max(maxY + tileGap, bbox.y + bbox.height + tileGap);
 
@@ -3386,7 +3739,7 @@ const DataPointOverlay = ({ mapRef }) => {
 
               const tileWidth = textBBox
                 ? Math.max(bbox.width, textBBox.width + tilePaddingX * 2)
-                : Math.max(bbox.width, 90 / effectiveZoom);
+                : Math.max(bbox.width, 90);
               const tileHeight = textBBox
                 ? textBBox.height + tilePaddingY * 2
                 : tilePaddingY * 2 + tileLineHeight * entry.tile.lines.length;
@@ -3400,7 +3753,7 @@ const DataPointOverlay = ({ mapRef }) => {
                 .attr('ry', tileRadius)
                 .attr('fill', 'rgba(12, 25, 46, 0.92)')
                 .attr('stroke', '#3b82f6')
-                .attr('stroke-width', 0.75 / effectiveZoom)
+                .attr('stroke-width', 0.75)
                 .attr('opacity', 0.95);
 
               minX = Math.min(minX, tileX);
@@ -3503,6 +3856,19 @@ const DataPointOverlay = ({ mapRef }) => {
           }
         };
 
+        // Enable pointer events on tooltip elements to keep them visible when hovering
+        if (labelBackground) {
+          labelBackground.style('pointer-events', 'all');
+        }
+        if (loadBarsContainer) {
+          loadBarsContainer.style('pointer-events', 'all');
+        }
+        if (shipmentTilesContainer) {
+          shipmentTilesContainer.style('pointer-events', 'all');
+        }
+
+        const tooltipElements = [labelBackground, loadBarsContainer, shipmentTilesContainer].filter(Boolean);
+
         markerGroup
           .on('mouseover.shipinfo', () => {
             showInfo();
@@ -3514,6 +3880,290 @@ const DataPointOverlay = ({ mapRef }) => {
               return;
             }
             hideInfo();
+          });
+
+        // Keep tooltip visible when hovering over tooltip elements
+        tooltipElements.forEach(element => {
+          if (element) {
+            element
+              .on('mouseover.tooltip', () => {
+                showInfo();
+              })
+              .on('mouseout.tooltip', (event) => {
+                const related = event.relatedTarget;
+                const groupNode = markerGroup.node();
+                if (related && groupNode && groupNode.contains(related)) {
+                  return;
+                }
+                hideInfo();
+              });
+          }
+        });
+      });
+    }
+
+    // Render system-level shipment count badges
+    if (systemShipmentCounts && systemShipmentCounts.counts && systemShipmentCounts.counts.size > 0) {
+      const effectiveZoom = Math.max(1, zoomLevel);
+      systemShipmentCounts.counts.forEach((count, systemId) => {
+        if (count === 0) return;
+
+        const systemCenter = getSystemCenter(systemId);
+        if (!systemCenter) return;
+
+        const badgeRadius = Math.max(7 / effectiveZoom, 4.2);
+        const badgeOffsetX = 0;
+        const badgeOffsetY = 0;
+        const badgeFontSize = Math.max(9.8 / effectiveZoom, 5.6);
+
+        const badgeGroup = overlayLayer.append('g')
+          .attr('class', 'system-shipment-badge')
+          .style('cursor', 'pointer');
+
+        // Badge background circle
+        badgeGroup.append('circle')
+          .attr('cx', systemCenter.x + badgeOffsetX)
+          .attr('cy', systemCenter.y - badgeOffsetY)
+          .attr('r', badgeRadius)
+          .attr('fill', '#3b82f6')
+          .attr('stroke', '#ffffff')
+          .attr('stroke-width', Math.max(1.4 / effectiveZoom, 0.98))
+          .attr('opacity', 0.95);
+
+        // Badge count text
+        badgeGroup.append('text')
+          .attr('x', systemCenter.x + badgeOffsetX)
+          .attr('y', systemCenter.y - badgeOffsetY)
+          .attr('text-anchor', 'middle')
+          .attr('dominant-baseline', 'central')
+          .attr('fill', '#ffffff')
+          .attr('font-size', `${badgeFontSize}px`)
+          .attr('font-weight', 700)
+          .attr('opacity', 1)
+          .text(count > 999 ? '999+' : count);
+
+        // Add hover functionality to show shipment details (SVG-based like ship tooltips)
+        const shipments = systemShipmentCounts.shipmentDetails.get(systemId) || [];
+        const systemName = systemNames[systemId] || systemId;
+
+        // Create tooltip group (hidden by default)
+        const tooltipGroup = overlayLayer.append('g')
+          .attr('class', 'system-shipment-tooltip')
+          .style('pointer-events', 'none')
+          .style('display', 'none');
+
+        // Build individual shipment tiles (not grouped)
+        const contractTiles = [];
+        let shipmentsWithoutContract = 0;
+
+        shipments.forEach(shipment => {
+          if (shipment.contract?.localId) {
+            const contract = shipment.contract;
+            const contractLocalId = contract.localId;
+
+            const weightText = shipment.weight > 0 ? formatCapacityValue(shipment.weight) : '—';
+            const volumeText = shipment.volume > 0 ? formatCapacityValue(shipment.volume) : '—';
+            const destination = contract.destination || '—';
+            const locationName = shipment.locationName || '—';
+
+            let deadlineText = '';
+            if (contract.deadlineEpochMs) {
+              const deadlineDate = new Date(contract.deadlineEpochMs);
+              const now = new Date();
+              const totalHours = Math.round((deadlineDate - now) / (1000 * 60 * 60));
+              const days = Math.floor(totalHours / 24);
+              const hours = totalHours % 24;
+
+              if (days > 0) {
+                deadlineText = ` (${days}d ${hours}h)`;
+              } else {
+                deadlineText = ` (${hours}h)`;
+              }
+            }
+
+            contractTiles.push({
+              localId: contractLocalId,
+              deadlineText,
+              weightText,
+              volumeText,
+              destination,
+              locationName,
+              lines: [
+                `Contract ${contractLocalId}${deadlineText}`,
+                `Wt ${weightText} · Vol ${volumeText}`,
+                `Dest ${destination}`
+              ]
+            });
+          } else {
+            shipmentsWithoutContract++;
+          }
+        });
+
+        const updateTooltipLayout = () => {
+          tooltipGroup.selectAll('*').remove();
+
+          if (shipments.length === 0) return;
+
+          const baseFontSize = 9.6;
+          const lineHeight = baseFontSize * 1.2;
+          const tilePaddingX = 6.4;
+          const tilePaddingY = 4.8;
+          const tileGap = 4.8;
+          const tileRadius = 3.2;
+          const headerFontSize = 10.4;
+
+          const tooltipX = systemCenter.x + 12;
+          const tooltipY = systemCenter.y - 8;
+
+          // Header
+          const headerText = tooltipGroup.append('text')
+            .attr('x', tooltipX)
+            .attr('y', tooltipY)
+            .attr('fill', '#f7a600')
+            .attr('font-size', `${headerFontSize}px`)
+            .attr('font-weight', 700)
+            .attr('text-anchor', 'start')
+            .attr('dominant-baseline', 'hanging')
+            .text(systemName);
+
+          let currentY = tooltipY + headerFontSize + tileGap;
+
+          // Summary line showing shipments without tracked contracts
+          let infoText = null;
+
+          if (shipmentsWithoutContract > 0) {
+            const summaryText = `${shipmentsWithoutContract} shipment${shipmentsWithoutContract > 1 ? 's' : ''} without tracked contract`;
+
+            infoText = tooltipGroup.append('text')
+              .attr('x', tooltipX)
+              .attr('y', currentY)
+              .attr('fill', '#fbbf24')
+              .attr('font-size', `${baseFontSize}px`)
+              .attr('font-weight', 600)
+              .attr('text-anchor', 'start')
+              .attr('dominant-baseline', 'hanging')
+              .text(summaryText);
+
+            currentY += baseFontSize + tileGap;
+          }
+
+          // First pass: calculate max width for all tiles and info text
+          let maxWidth = 0;
+
+          // Include info text width in calculation
+          if (infoText) {
+            const infoTextBBox = infoText.node().getBBox();
+            maxWidth = Math.max(maxWidth, infoTextBBox.width);
+          }
+          const tileElements = [];
+
+          contractTiles.forEach(tile => {
+            const tileGroup = tooltipGroup.append('g');
+
+            const tileText = tileGroup.append('text')
+              .attr('x', tilePaddingX)
+              .attr('y', tilePaddingY)
+              .attr('font-size', `${baseFontSize}px`)
+              .attr('text-anchor', 'start')
+              .attr('dominant-baseline', 'hanging');
+
+            tile.lines.forEach((line, idx) => {
+              tileText.append('tspan')
+                .attr('x', tilePaddingX)
+                .attr('dy', idx === 0 ? 0 : lineHeight)
+                .attr('fill', idx === 0 ? '#facc15' : (idx === 1 ? '#bae6fd' : '#cbd5f5'))
+                .attr('font-weight', idx === 0 ? 700 : (idx === 1 ? 600 : 500))
+                .text(line);
+            });
+
+            const textBBox = tileText.node().getBBox();
+            const tileWidth = textBBox.width + tilePaddingX * 2;
+            const tileHeight = textBBox.height + tilePaddingY * 2;
+
+            maxWidth = Math.max(maxWidth, tileWidth);
+
+            tileElements.push({
+              group: tileGroup,
+              text: tileText,
+              width: tileWidth,
+              height: tileHeight
+            });
+          });
+
+          // Second pass: position tiles with uniform width
+          tileElements.forEach(element => {
+            element.group.attr('transform', `translate(${tooltipX}, ${currentY})`);
+
+            element.group.insert('rect', 'text')
+              .attr('x', 0)
+              .attr('y', 0)
+              .attr('width', maxWidth)
+              .attr('height', element.height)
+              .attr('rx', tileRadius)
+              .attr('ry', tileRadius)
+              .attr('fill', 'rgba(12, 25, 46, 0.92)')
+              .attr('stroke', '#3b82f6')
+              .attr('stroke-width', 0.6)
+              .attr('opacity', 0.95);
+
+            currentY += element.height + tileGap;
+          });
+
+          // Background for entire tooltip
+          const totalHeight = currentY - tooltipY;
+          tooltipGroup.insert('rect', ':first-child')
+            .attr('x', tooltipX - tilePaddingX)
+            .attr('y', tooltipY - tilePaddingY)
+            .attr('width', maxWidth + tilePaddingX * 2)
+            .attr('height', totalHeight + tilePaddingY)
+            .attr('rx', 4.8)
+            .attr('ry', 4.8)
+            .attr('fill', 'rgba(0, 0, 0, 0.9)')
+            .attr('stroke', '#444')
+            .attr('stroke-width', 0.8)
+            .attr('opacity', 0.95);
+        };
+
+        // Enable pointer events on tooltip to keep it visible when hovering
+        tooltipGroup.style('pointer-events', 'all');
+
+        const showTooltip = () => {
+          tooltipGroup.style('display', null);
+          updateTooltipLayout();
+        };
+
+        const hideTooltip = () => {
+          tooltipGroup.style('display', 'none');
+        };
+
+        badgeGroup
+          .on('mouseover', function () {
+            showTooltip();
+          })
+          .on('mouseout', function (event) {
+            const related = event.relatedTarget;
+            const tooltipNode = tooltipGroup.node();
+            if (related && tooltipNode && tooltipNode.contains(related)) {
+              return;
+            }
+            hideTooltip();
+          });
+
+        tooltipGroup
+          .on('mouseover', function () {
+            showTooltip();
+          })
+          .on('mouseout', function (event) {
+            const related = event.relatedTarget;
+            const badgeNode = badgeGroup.node();
+            const tooltipNode = tooltipGroup.node();
+            if (related && (
+              (badgeNode && badgeNode.contains(related)) ||
+              (tooltipNode && tooltipNode.contains(related))
+            )) {
+              return;
+            }
+            hideTooltip();
           });
       });
     }
@@ -3664,7 +4314,7 @@ const DataPointOverlay = ({ mapRef }) => {
       addBarHoverEffects(densityBar, 'Density', density, densityColorScale);
       addBarHoverEffects(luminosityBar, 'Luminosity', luminosity, luminosityColorScale);
     });
-  }, [mapRef, isOverlayVisible, isLoading, error, meteorDensityData, luminosityData, systemNames, maxValues, ships, flights, graph, selectedShipId, planetLookups, systemLookups, showShipLabels, getShipLoadInfoById, getLoadColorForRatio, buildLoadSummary, buildShipmentTiles, buildLoadBarDescriptors, formatCapacityValue, partnerFilterActive, partnerFilteredShipments, filterShipmentsByPartner]);
+  }, [mapRef, isOverlayVisible, isLoading, error, meteorDensityData, luminosityData, systemNames, maxValues, ships, flights, graph, selectedShipId, planetLookups, systemLookups, showShipLabels, getShipLoadInfoById, getLoadColorForRatio, buildLoadSummary, buildShipmentTiles, buildLoadBarDescriptors, formatCapacityValue, partnerFilterActive, partnerFilteredShipments, filterShipmentsByPartner, systemShipmentCounts]);
 
   useEffect(() => {
     renderOverlay();
@@ -3709,76 +4359,92 @@ const DataPointOverlay = ({ mapRef }) => {
       }}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        <span style={{ fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: '11px' }}>Ship Filter</span>
-
-        <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <span style={{ fontSize: '11px', fontWeight: 500, opacity: 0.85 }}>Your company code to track your shipments</span>
-          <input
-            type="text"
-            value={partnerFilter}
-            onChange={handlePartnerFilterChange}
-            placeholder="Filter by company code"
-            style={{
-              background: '#1f2933',
-              color: '#f5f5f5',
-              border: '1px solid rgba(255,255,255,0.2)',
-              borderRadius: '4px',
-              padding: '5px 6px',
-              fontSize: '12px',
-              outline: 'none'
-            }}
-          />
-        </label>
-
-        {showNoPartnerMatches ? (
-          <span style={{ fontSize: '11px', color: '#fca5a5' }}>
-            {`No shipments found for company code "${partnerFilterDisplay}"`}
-          </span>
-        ) : null}
-
-        <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <span style={{ fontSize: '11px', fontWeight: 500, opacity: 0.85 }}>Ship Selection</span>
-          <select
-            value={selectedShipId}
-            onChange={handleShipChange}
-            style={{
-              background: '#1f2933',
-              color: '#f5f5f5',
-              border: '1px solid rgba(255,255,255,0.2)',
-              borderRadius: '4px',
-              padding: '4px 6px',
-              fontSize: '12px',
-              outline: 'none'
-            }}
-          >
-            {shipOptions.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <button
-          type="button"
-          onClick={toggleShipLabels}
+        <div
           style={{
-            marginTop: '4px',
-            background: labelsEnabled ? '#f7a600' : '#3b82f6',
-            color: '#0b0d10',
-            border: 'none',
-            borderRadius: '4px',
-            padding: '6px 8px',
-            fontSize: '11px',
-            fontWeight: 600,
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
             cursor: 'pointer',
-            transition: 'background-color 0.2s ease'
+            userSelect: 'none'
           }}
+          onClick={() => setIsShipFilterCollapsed(!isShipFilterCollapsed)}
         >
-          {labelsEnabled ? 'Hide Ship Labels' : 'Show Ship Labels'}
-        </button>
+          <span style={{ fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: '11px' }}>Ship Filter</span>
+          <span style={{ fontSize: '14px', opacity: 0.7 }}>{isShipFilterCollapsed ? '▶' : '▼'}</span>
+        </div>
+
+        {!isShipFilterCollapsed && (
+          <>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 500, opacity: 0.85 }}>Filter shipments by company code</span>
+              <input
+                type="text"
+                value={partnerFilter}
+                onChange={handlePartnerFilterChange}
+                placeholder="Company code"
+                style={{
+                  background: '#1f2933',
+                  color: '#f5f5f5',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  borderRadius: '4px',
+                  padding: '5px 6px',
+                  fontSize: '12px',
+                  outline: 'none'
+                }}
+              />
+            </label>
+
+            {showNoPartnerMatches ? (
+              <span style={{ fontSize: '11px', color: '#fca5a5' }}>
+                {`No shipments found for company code "${partnerFilterDisplay}"`}
+              </span>
+            ) : null}
+
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 500, opacity: 0.85 }}>Ship Filter</span>
+              <select
+                value={selectedShipId}
+                onChange={handleShipChange}
+                style={{
+                  background: '#1f2933',
+                  color: '#f5f5f5',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  borderRadius: '4px',
+                  padding: '4px 6px',
+                  fontSize: '12px',
+                  outline: 'none'
+                }}
+              >
+                {shipOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <button
+              type="button"
+              onClick={toggleShipLabels}
+              style={{
+                marginTop: '4px',
+                background: labelsEnabled ? '#f7a600' : '#3b82f6',
+                color: '#0b0d10',
+                border: 'none',
+                borderRadius: '4px',
+                padding: '6px 8px',
+                fontSize: '11px',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                cursor: 'pointer',
+                transition: 'background-color 0.2s ease'
+              }}
+            >
+              {labelsEnabled ? 'Hide Ship Labels' : 'Show Ship Labels'}
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
