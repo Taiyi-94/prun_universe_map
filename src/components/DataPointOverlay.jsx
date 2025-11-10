@@ -353,6 +353,12 @@ const DataPointOverlay = ({ mapRef }) => {
       return null;
     };
 
+    // Debug: Log contract data
+    console.log('[DEBUG] Total contracts:', contracts?.length || 0);
+    if (contracts?.length > 0) {
+      console.log('[DEBUG] First contract sample:', contracts[0]);
+    }
+
     (contracts || []).forEach((contract) => {
       if (!contract || typeof contract !== 'object') {
         return;
@@ -391,6 +397,14 @@ const DataPointOverlay = ({ mapRef }) => {
         return;
       }
 
+      // Debug: Log when we find a delivery shipment contract
+      console.log('[DEBUG] Processing delivery shipment contract:', {
+        contractLocalId,
+        type: rawContractType,
+        normalized: normalizedContractType,
+        conditionsCount: conditions.length
+      });
+
       conditions.forEach((condition) => {
         if (!condition || typeof condition !== 'object') {
           return;
@@ -409,8 +423,15 @@ const DataPointOverlay = ({ mapRef }) => {
           || null;
         const normalizedShipmentItemId = normalizeLookupKey(rawShipmentItemId);
         if (!normalizedShipmentItemId) {
+          console.log('[DEBUG] Skipping condition - no shipment item ID:', condition);
           return;
         }
+
+        console.log('[DEBUG] Adding condition to map:', {
+          shipmentItemId: normalizedShipmentItemId,
+          contractLocalId,
+          destination: condition.Destination || condition.destination
+        });
 
         const conditionEntry = {
           contractId,
@@ -460,6 +481,9 @@ const DataPointOverlay = ({ mapRef }) => {
       });
 
     });
+
+    console.log('[DEBUG] Final shipmentContractsByItemId map size:', map.size);
+    console.log('[DEBUG] All shipment item IDs in map:', Array.from(map.keys()));
 
     return map;
   }, [contracts]);
@@ -958,10 +982,19 @@ const DataPointOverlay = ({ mapRef }) => {
 
           // Find the associated contract(s) using material ID
           let contractInfo = null;
+          console.log('[DEBUG] Looking for contract for item:', {
+            candidateIds,
+            systemId,
+            locationName: storage.LocationName
+          });
+          
           for (const candidateId of candidateIds) {
             const normalized = normalizeLookupKey(candidateId);
+            console.log('[DEBUG] Checking candidate ID:', candidateId, '-> normalized:', normalized);
+            
             if (normalized && shipmentContractsByItemId && shipmentContractsByItemId.has(normalized)) {
               const contractEntries = shipmentContractsByItemId.get(normalized);
+              console.log('[DEBUG] Found contract entries:', contractEntries);
               // Get the first contract entry (they're already sorted)
               const firstEntry = Array.isArray(contractEntries) ? contractEntries[0] : contractEntries;
               if (firstEntry) {
@@ -977,7 +1010,13 @@ const DataPointOverlay = ({ mapRef }) => {
                 };
               }
               break;
+            } else {
+              console.log('[DEBUG] No match for normalized ID:', normalized, 'in contract map');
             }
+          }
+
+          if (!contractInfo) {
+            console.log('[DEBUG] No contract found for shipment item');
           }
 
           shipmentDetails.get(systemId).push({
@@ -2528,34 +2567,6 @@ const DataPointOverlay = ({ mapRef }) => {
           return;
         }
         const ship = shipsById.get(flight.ShipId) || null;
-        if (ship?.Name === 'GenFreight 6' || ship?.ShipName === 'GenFreight 6' || flightShipIdStr === 'GenFreight 6') {
-          const originCandidate = selectDisplayLocation(
-            deriveLocationFromLabel(flight.Origin),
-            segmentPairs.meta?.firstLocation,
-            segmentPairs[0]?.fromLocation
-          );
-          const destinationCandidate = selectDisplayLocation(
-            deriveLocationFromLabel(flight.Destination),
-            segmentPairs.meta?.finalLocation,
-            segmentPairs[segmentPairs.length - 1]?.toLocation
-          );
-
-          // eslint-disable-next-line no-console
-          console.debug('[GenFreight 6][flight-after-segments]', {
-            flightShipId: flightShipIdStr,
-            flightId: flight.FlightId,
-            originLabel: flight.Origin,
-            destinationLabel: flight.Destination,
-            hasSegments: segmentPairs.length > 0,
-            segmentPairsCount: segmentPairs.length,
-            firstLocationMeta: segmentPairs.meta?.firstLocation,
-            finalLocationMeta: segmentPairs.meta?.finalLocation,
-            resolvedOrigin: originCandidate,
-            resolvedDestination: destinationCandidate,
-            firstSegment: segmentPairs[0] || null,
-            lastSegment: segmentPairs[segmentPairs.length - 1] || null
-          });
-        }
         const shipStyle = classifyShipType(ship, flightShipIdStr);
         const pathColor = shipStyle.color;
         const shipTypeLabel = shipStyle.label;
