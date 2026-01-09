@@ -32,7 +32,7 @@ export const MapModeProvider = ({ children }) => {
 
   // Fetch Existing Gateways
   useEffect(() => {
-    fetch('gateways.json')
+    fetch(`${process.env.PUBLIC_URL}/gateways.json`)
       .then(response => response.json())
       .then(data => setExistingGateways(data))
       .catch(err => console.error("Failed to load existing gateways:", err));

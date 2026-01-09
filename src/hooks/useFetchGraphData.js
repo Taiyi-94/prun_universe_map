@@ -5,7 +5,7 @@ export const useFetchGraphData = () => {
 
   useEffect(() => {
     console.log('useFetchGraphData hook executed');
-    fetch('graph_data.json')
+    fetch(`${process.env.PUBLIC_URL}/graph_data.json`)
       .then(response => response.json())
       .then(data => {
         console.log('Fetched Graph Data:', data);

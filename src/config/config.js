@@ -19,6 +19,7 @@ export const colors = {
   resetSystemStrokeWidth: '1px',
   resetPathStroke: '#6e7980',
   resetPathStrokeWidth: '1px',
+  gatewayLineColor: '#aa639eff',
   
   // Tol Palette (Vibrant/Muted mix for distinctness)
   tol: {

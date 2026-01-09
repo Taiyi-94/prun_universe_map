@@ -25,9 +25,11 @@ export const DataPointProvider = ({ children }) => {
     const fetchOverlayData = async () => {
       try {
         setIsLoading(true);
+
+        // if we aren't running at the root of the webserver, we need to look at the appropriate place for these.
         const [staticResponse, freshResponse] = await Promise.all([
-          fetch('systemstars.json'),         // The old, enriched file with Luminosity/Density
-          fetch('prun_universe_data.json') // The file that will be updated weekly with fresh names
+          fetch(`${process.env.PUBLIC_URL}/systemstars.json`),         // The old, enriched file with Luminosity/Density
+          fetch(`${process.env.PUBLIC_URL}/prun_universe_data.json`) // The file that will be updated weekly with fresh names
         ]);
 
         if (!staticResponse.ok || !freshResponse.ok) {
