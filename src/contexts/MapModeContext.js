@@ -51,9 +51,13 @@ export const MapModeProvider = ({ children }) => {
       const results = findClosestSystems(gatewayData.originA, universeData);
       setCandidateList(results);
     } 
-    else if (gatewayData.strategy === GATEWAY_STRATEGIES.DUAL && gatewayData.originB) {
-      const results = findBestMidpoints(gatewayData.originA, gatewayData.originB, universeData);
-      setCandidateList(results);
+    else if (gatewayData.strategy === GATEWAY_STRATEGIES.DUAL) {
+      if (gatewayData.originB) {
+        const results = findBestMidpoints(gatewayData.originA, gatewayData.originB, universeData);
+        setCandidateList(results);
+      } else {
+        setCandidateList([]);
+      }
     }
   }, [gatewayData.originA, gatewayData.originB, gatewayData.strategy, activeMode, universeData]);
 
@@ -69,6 +73,7 @@ export const MapModeProvider = ({ children }) => {
       strategy,
       originB: strategy === GATEWAY_STRATEGIES.SINGLE ? null : prev.originB 
     }));
+    setCandidateList([]); 
   }, []);
 
   const setOriginById = useCallback((systemId, slot = 'A') => {
