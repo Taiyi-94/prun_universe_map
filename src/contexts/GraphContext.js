@@ -13,7 +13,7 @@ export const GraphProvider = ({ children }) => {
 
   useEffect(() => {
     console.log('Fetching graph data');
-    fetch('graph_data.json')
+    fetch(`${process.env.PUBLIC_URL}/graph_data.json`)
       .then(response => response.json())
       .then(data => {
         setGraph(data);
@@ -22,7 +22,7 @@ export const GraphProvider = ({ children }) => {
         console.error('Error fetching graph data:', error);
       });
 
-    fetch('material_data.json')
+    fetch(`${process.env.PUBLIC_URL}/material_data.json`)
       .then(response => response.json())
       .then(data => {
         setMaterials(data);
@@ -31,7 +31,7 @@ export const GraphProvider = ({ children }) => {
         console.error('Error fetching material data:', error);
       });
 
-    fetch('prun_universe_data.json')
+    fetch(`${process.env.PUBLIC_URL}/prun_universe_data.json`)
       .then(response => response.json())
       .then(data => {
         // Group planets by SystemId
@@ -48,8 +48,8 @@ export const GraphProvider = ({ children }) => {
         console.error('Error fetching universe data:', error);
       });
 
-    // Fetch planet data
-    fetch('planet_data.json')
+    // Fetch planet data`
+    fetch(`${process.env.PUBLIC_URL}/planet_data.json`)
       .then(response => response.json())
       .then(data => {
         // Group planets by SystemId
@@ -67,7 +67,7 @@ export const GraphProvider = ({ children }) => {
       });
 
     // Fetch Population Data
-    fetch('population_data.json')
+    fetch(`${process.env.PUBLIC_URL}/population_data.json`)
       .then(response => response.json())
       .then(data => {
         setPopulationData(data);

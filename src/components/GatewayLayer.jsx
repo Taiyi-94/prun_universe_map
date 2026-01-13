@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useMapMode } from '../contexts/MapModeContext';
+import { colors } from '../config/config';
 
 const GatewayLayer = ({ mapRef, mapRenderKey }) => {
   const { existingGateways, gatewayData, activeMode } = useMapMode();
@@ -53,7 +54,7 @@ const GatewayLayer = ({ mapRef, mapRenderKey }) => {
                     .attr('y1', start.y)
                     .attr('x2', end.x)
                     .attr('y2', end.y)
-                    .attr('stroke', '#666')
+                    .attr('stroke', colors.gatewayLineColor)
                     .attr('stroke-width', 1)
                     .attr('stroke-dasharray', '4,2')
                     .attr('pointer-events', 'none');

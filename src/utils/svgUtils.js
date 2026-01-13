@@ -13,9 +13,11 @@ let universeMaxConcentrations = null;
 // Function to fetch and process the universe and planet data
 const fetchData = async () => {
   try {
+
+    // if we aren't running at the root of the webserver, we need to look at the appropriate place for these.
     const [universeResponse, planetResponse] = await Promise.all([
-      fetch('prun_universe_data.json'),
-      fetch('planet_data.json')
+      fetch(`${process.env.PUBLIC_URL}/prun_universe_data.json`),
+      fetch(`${process.env.PUBLIC_URL}/planet_data.json`)
     ]);
     const universeJson = await universeResponse.json();
     const planetJson = await planetResponse.json();
