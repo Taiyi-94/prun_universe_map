@@ -1,6 +1,5 @@
 /node_modules/
 /prun_universe_map.tar
-/Dockerfile
 .dockerignore
 build
 project_code_export.txt
