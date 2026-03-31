@@ -231,7 +231,7 @@ const UniverseMap = React.memo(() => {
 
   return (
     <div id="map-container">
-      <DataPointOverlay mapRef={graphRef} />
+      <DataPointOverlay mapRef={graphRef} mapRenderKey={mapRenderKey} />
       <GatewayLayer mapRef={graphRef} mapRenderKey={mapRenderKey} /> 
     </div>
   );

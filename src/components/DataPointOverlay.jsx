@@ -2,7 +2,8 @@ import React, { useEffect, useCallback } from 'react';
 import * as d3 from 'd3';
 import { useDataPoints } from '../contexts/DataPointContext';
 
-const DataPointOverlay = ({ mapRef }) => {
+// Add mapRenderKey to props
+const DataPointOverlay = ({ mapRef, mapRenderKey }) => {
   const {
     meteorDensityData,
     luminosityData,
@@ -14,21 +15,21 @@ const DataPointOverlay = ({ mapRef }) => {
   } = useDataPoints();
 
   const renderOverlay = useCallback(() => {
-    if (!mapRef?.current?.g) return;
-
-    // Clean up existing elements
-    mapRef.current.g.selectAll('.meteor-density-group').remove();
-    mapRef.current.g.selectAll('.system-name-label').remove();
-
-    if (!isOverlayVisible || isLoading || error) {
-      return;
-    }
+    // Check if mapRef and the SVG group (g) are actually ready
+    if (!mapRef?.current?.g || mapRef.current.g.empty()) return;
 
     const { g } = mapRef.current;
+    
+    // Clean up existing elements to prevent duplicates
+    g.selectAll('.meteor-density-group').remove();
+    g.selectAll('.system-name-label').remove();
+
+    if (isLoading || error) return;
+
     const transform = d3.zoomTransform(g.node());
     const zoomLevel = transform?.k || 1;
 
-    // Color scales for both metrics
+    // Scales
     const densityColorScale = d3.scaleSequential()
       .domain([0, maxValues.density])
       .interpolator(d3.interpolatePuBu);
@@ -37,89 +38,25 @@ const DataPointOverlay = ({ mapRef }) => {
       .domain([0, maxValues.luminosity])
       .interpolator(d3.interpolateWarm);
 
-    g.selectAll('rect:not(.meteor-density-bar)').each(function() {
+    // Loop through system rectangles
+    g.selectAll('rect:not(.meteor-density-bar, .luminosity-bar, .data-overlay)').each(function() {
       const node = d3.select(this);
       const systemId = node.attr('id');
-
-      if (systemId === 'rect1') return;
-
-      const density = meteorDensityData[systemId] || 0;
-      const luminosity = luminosityData[systemId] || 0;
+      if (!systemId || systemId === 'rect1') return;
 
       const nodeWidth = parseFloat(node.attr('width'));
       const nodeHeight = parseFloat(node.attr('height'));
       const nodeX = parseFloat(node.attr('x'));
       const nodeY = parseFloat(node.attr('y'));
 
-      const systemGroup = g.append('g')
-        .attr('class', 'meteor-density-group');
-
-      // Calculate bar dimensions
-      const barWidth = Math.max(3, nodeWidth * 0.2 / zoomLevel);
-      const maxBarHeight = nodeHeight;
-      const barSpacing = barWidth * 0.5;
-
-      // Create log scale for luminosity bar height
-      const luminosityLogScale = d3.scaleLog()
-        .domain([0.01, maxValues.luminosity]) // Using 0.1 as minimum to avoid log(0)
-        .range([0, maxBarHeight]);
-
-      // Density bar
-      const densityHeight = maxBarHeight * (density / maxValues.density);
-      const densityX = nodeX + nodeWidth * 1.2;
-
-      // Background for density bar
-      systemGroup.append('rect')
-        .attr('class', 'meteor-density-bar-background data-overlay')
-        .attr('x', densityX)
-        .attr('y', nodeY)
-        .attr('width', barWidth)
-        .attr('height', maxBarHeight)
-        .attr('fill', '#2a2a2a')
-        .attr('opacity', 0.5);
-
-      // Density bar
-      const densityBar = systemGroup.append('rect')
-        .attr('class', 'meteor-density-bar data-overlay')
-        .attr('x', densityX)
-        .attr('y', nodeY + maxBarHeight - densityHeight)
-        .attr('width', barWidth)
-        .attr('height', densityHeight)
-        .attr('fill', densityColorScale(density))
-        .attr('opacity', 0.8);
-
-      // Luminosity bar
-      const luminosityHeight = luminosityLogScale(Math.max(0.1, luminosity));
-      const luminosityX = densityX + barWidth + barSpacing;
-
-      // Background for luminosity bar
-      systemGroup.append('rect')
-        .attr('class', 'luminosity-bar-background data-overlay')
-        .attr('x', luminosityX)
-        .attr('y', nodeY)
-        .attr('width', barWidth)
-        .attr('height', maxBarHeight)
-        .attr('fill', '#2a2a2a')
-        .attr('opacity', 0.5);
-
-      // Luminosity bar
-      const luminosityBar = systemGroup.append('rect')
-        .attr('class', 'luminosity-bar data-overlay')
-        .attr('x', luminosityX)
-        .attr('y', nodeY + maxBarHeight - luminosityHeight)
-        .attr('width', barWidth)
-        .attr('height', luminosityHeight)
-        .attr('fill', luminosityColorScale(luminosity))
-        .attr('opacity', 0.8);
-
-      // System name label
-      systemGroup.append('text')
+      // 1. ALWAYS draw System Names (Visible by default)
+      g.append('text')
         .attr('class', 'system-name-label data-overlay')
         .attr('x', nodeX + (nodeWidth / 2))
         .attr('y', nodeY + nodeHeight + 2)
         .attr('fill', '#CCCCCC')
         .attr('stroke', '#000000')
-        .attr('stroke-width', 1 / zoomLevel)
+        .attr('stroke-width', 0.8 / zoomLevel)
         .attr('paint-order', 'stroke')
         .attr('font-size', '6px')
         .attr('text-anchor', 'middle')
@@ -127,51 +64,47 @@ const DataPointOverlay = ({ mapRef }) => {
         .style('pointer-events', 'none')
         .text(systemNames[systemId] || systemId);
 
-      // Add hover interactions for both bars
-      const addBarHoverEffects = (bar, dataType, value, colorScale) => {
-        bar.on('mouseover.data', function(event) {
-          event.stopPropagation();
-          d3.select(this)
-            .attr('opacity', 1)
-            .attr('stroke', '#ffffff')
-            .attr('stroke-width', 1 / zoomLevel);
+      // 2. Draw Data Bars only if the toggle is ON
+      if (isOverlayVisible) {
+        const density = meteorDensityData[systemId] || 0;
+        const luminosity = luminosityData[systemId] || 0;
+        const systemGroup = g.append('g').attr('class', 'meteor-density-group');
+        const barWidth = Math.max(3, nodeWidth * 0.2 / zoomLevel);
+        const maxBarHeight = nodeHeight;
+        const barSpacing = barWidth * 0.5;
+        const luminosityLogScale = d3.scaleLog().domain([0.01, maxValues.luminosity]).range([0, maxBarHeight]);
+        
+        const dHeight = maxBarHeight * (density / maxValues.density);
+        const dX = nodeX + nodeWidth * 1.2;
+        systemGroup.append('rect').attr('class', 'data-overlay').attr('x', dX).attr('y', nodeY).attr('width', barWidth).attr('height', maxBarHeight).attr('fill', '#2a2a2a').attr('opacity', 0.5);
+        const dBar = systemGroup.append('rect').attr('class', 'data-overlay').attr('x', dX).attr('y', nodeY + maxBarHeight - dHeight).attr('width', barWidth).attr('height', dHeight).attr('fill', densityColorScale(density)).attr('opacity', 0.8);
 
-          d3.select('body')
-            .append('div')
-            .attr('class', 'data-overlay-tooltip')
-            .style('position', 'absolute')
-            .style('left', `${event.pageX + 10}px`)
-            .style('top', `${event.pageY - 10}px`)
-            .style('background-color', 'rgba(0, 0, 0, 0.8)')
-            .style('color', 'white')
-            .style('padding', '5px')
-            .style('border-radius', '4px')
-            .style('font-size', '12px')
-            .style('pointer-events', 'none')
-            .html(`
-              <div style="background: rgba(0,0,0,0.9); padding: 8px; border-radius: 4px; border: 1px solid #444">
-                <div style="font-weight: bold; color: #f7a600; margin-bottom: 4px">${systemNames[systemId] || systemId}</div>
-                <div>${dataType}: ${value.toFixed(3)}</div>
-                <div style="color: #aaa; font-size: 11px; margin-top: 2px">
-                  Relative to Max (${maxValues[dataType.toLowerCase()].toFixed(2)}):
-                  ${((value / maxValues[dataType.toLowerCase()]) * 100).toFixed(1)}%
-                </div>
-              </div>
-            `);
-        })
-        .on('mouseout.data', function(event) {
-          event.stopPropagation();
-          d3.select(this)
-            .attr('opacity', 0.8)
-            .attr('stroke', 'none');
-          d3.selectAll('.data-overlay-tooltip').remove();
-        });
-      };
+        const lHeight = luminosityLogScale(Math.max(0.1, luminosity));
+        const lX = dX + barWidth + barSpacing;
+        systemGroup.append('rect').attr('class', 'data-overlay').attr('x', lX).attr('y', nodeY).attr('width', barWidth).attr('height', maxBarHeight).attr('fill', '#2a2a2a').attr('opacity', 0.5);
+        const lBar = systemGroup.append('rect').attr('class', 'data-overlay').attr('x', lX).attr('y', nodeY + maxBarHeight - lHeight).attr('width', barWidth).attr('height', lHeight).attr('fill', luminosityColorScale(luminosity)).attr('opacity', 0.8);
 
-      addBarHoverEffects(densityBar, 'Density', density, densityColorScale);
-      addBarHoverEffects(luminosityBar, 'Luminosity', luminosity, luminosityColorScale);
+        const addHover = (bar, label, val) => {
+          bar.on('mouseover.data', (e) => {
+            e.stopPropagation();
+            d3.select(e.currentTarget).attr('opacity', 1).attr('stroke', '#fff').attr('stroke-width', 1 / zoomLevel);
+            d3.select('body').append('div').attr('class', 'data-overlay-tooltip')
+              .style('position', 'absolute').style('left', `${e.pageX + 10}px`).style('top', `${e.pageY - 10}px`)
+              .html(`<div style="background:rgba(0,0,0,0.9);padding:8px;border-radius:4px;border:1px solid #444;color:white;font-size:12px;">
+                <div style="color:#f7a600;font-weight:bold">${systemNames[systemId] || systemId}</div>
+                ${label}: ${val.toFixed(3)}
+              </div>`);
+          }).on('mouseout.data', (e) => {
+            d3.select(e.currentTarget).attr('opacity', 0.8).attr('stroke', 'none');
+            d3.selectAll('.data-overlay-tooltip').remove();
+          });
+        };
+        addHover(dBar, 'Density', density);
+        addHover(lBar, 'Luminosity', luminosity);
+      }
     });
-  }, [mapRef, isOverlayVisible, isLoading, error, meteorDensityData, luminosityData, systemNames, maxValues]);
+    // Add mapRenderKey to the dependency array
+  }, [mapRef, mapRenderKey, isOverlayVisible, isLoading, error, meteorDensityData, luminosityData, systemNames, maxValues]);
 
   useEffect(() => {
     renderOverlay();
@@ -179,20 +112,9 @@ const DataPointOverlay = ({ mapRef }) => {
 
   useEffect(() => {
     if (!mapRef?.current?.svg) return;
-
-    // Capture the current svg reference
     const svg = mapRef.current.svg;
-
-    const handleZoom = () => {
-      renderOverlay();
-    };
-
-    svg.on('zoom.overlay', handleZoom);
-
-    return () => {
-      // Use the captured reference in cleanup
-      svg.on('zoom.overlay', null);
-    };
+    svg.on('zoom.overlay', renderOverlay);
+    return () => svg.on('zoom.overlay', null);
   }, [mapRef, renderOverlay]);
 
   return null;
