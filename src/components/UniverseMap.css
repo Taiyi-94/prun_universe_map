@@ -186,3 +186,49 @@
     width: 40px;
   }
 }
+
+.gateway-detail-tooltip {
+  position: absolute;
+  background: #1a1a1a;
+  border: 1px solid #f7a600;
+  border-radius: 4px;
+  padding: 10px;
+  z-index: 2000;
+  pointer-events: none;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+}
+
+.gateway-tooltip-container {
+  display: flex;
+  gap: 20px;
+}
+
+.gateway-col {
+  min-width: 120px;
+}
+
+.gateway-col:not(:last-child) {
+  border-right: 1px solid #444;
+  padding-right: 20px;
+}
+
+.gw-title {
+  font-weight: bold;
+  color: #f7a600;
+  font-size: 13px;
+  margin-bottom: 5px;
+}
+
+.gw-stat {
+  font-size: 11px;
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+
+.gw-stat.ops { color: #66ff66; }
+.gw-stat.err { color: #ff6666; }
+
+.gw-info {
+  font-size: 11px;
+  color: #ccc;
+}

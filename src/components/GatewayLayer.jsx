@@ -1,106 +1,97 @@
-import { useEffect } from 'react';
+import React, { useEffect } from 'react';
+import * as d3 from 'd3';
 import { useMapMode } from '../contexts/MapModeContext';
 import { colors } from '../config/config';
 
 const GatewayLayer = ({ mapRef, mapRenderKey }) => {
-  const { existingGateways, gatewayData, activeMode } = useMapMode();
+  const { existingGateways, activeMode } = useMapMode();
 
   useEffect(() => {
     if (!mapRef.current || mapRenderKey === 0) return;
     
     const { g } = mapRef.current;
+    if (!g || g.empty()) {
+        console.error("GatewayLayer: D3 group 'g' not found.");
+        return;
+    }
 
+    console.log(`GatewayLayer: Attempting to draw ${existingGateways.length} pairs.`);
+
+    // Clear existing layers
     let bgGroup = g.select('.gateway-background-layer');
-    
     if (bgGroup.empty()) {
-        const firstSystemNode = g.select('rect:not(#rect1)').node();
-        
-        if (firstSystemNode) {
-            bgGroup = g.insert('g', () => firstSystemNode)
-                          .attr('class', 'gateway-background-layer');
-        } else {
-            bgGroup = g.append('g').attr('class', 'gateway-background-layer');
-        }
+        bgGroup = g.insert('g', 'rect').attr('class', 'gateway-background-layer');
     }
     bgGroup.selectAll('*').remove();
 
-    let fgGroup = g.select('.gateway-foreground-layer');
-    
-    if (fgGroup.empty()) {
-        fgGroup = g.append('g').attr('class', 'gateway-foreground-layer');
-    } else {
-        fgGroup.raise(); 
-    }
-    fgGroup.selectAll('*').remove();
-
-    const getCoords = (systemId) => {
-        const node = g.select(`#${CSS.escape(systemId)}`);
-        if (node.empty()) return null;
+    const getCoords = (id) => {
+        const escapedId = CSS.escape(id);
+        const node = g.select(`#${escapedId}`);
+        
+        if (node.empty()) {
+        // THIS IS CRITICAL: If this logs, the ID in gateways.json doesn't match the ID in the SVG
+        console.warn(`GatewayLayer: System ID "${id}" not found in SVG DOM.`);
+        return null;
+        }
+        
         return {
-            x: parseFloat(node.attr('x')) + parseFloat(node.attr('width')) / 2,
-            y: parseFloat(node.attr('y')) + parseFloat(node.attr('height')) / 2
+        x: parseFloat(node.attr('x')) + parseFloat(node.attr('width')) / 2,
+        y: parseFloat(node.attr('y')) + parseFloat(node.attr('height')) / 2
         };
     };
 
-    if (existingGateways && existingGateways.length > 0) {
-        existingGateways.forEach(gw => {
-            const start = getCoords(gw.sourceId);
-            const end = getCoords(gw.targetId);
-            
-            if (start && end) {
-                bgGroup.append('line')
-                    .attr('class', 'gateway-line')
-                    .attr('x1', start.x)
-                    .attr('y1', start.y)
-                    .attr('x2', end.x)
-                    .attr('y2', end.y)
-                    .attr('stroke', colors.gatewayLineColor)
-                    .attr('stroke-width', 1)
-                    .attr('stroke-dasharray', '4,2')
-                    .attr('pointer-events', 'none');
-            }
-        });
-    }
+    let drawnCount = 0;
+    existingGateways.forEach(pair => {
+        const start = getCoords(pair.sourceSysId);
+        const end = getCoords(pair.targetSysId);
+        
+        if (start && end) {
+            const lineGroup = bgGroup.append('g')
+            .attr('class', 'gateway-link-item');
 
-    if (gatewayData.plannedGateways && gatewayData.plannedGateways.length > 0) {
-        gatewayData.plannedGateways.forEach(gw => {
-             const start = getCoords(gw.sourceId);
-             const end = getCoords(gw.targetId);
+            // The visible dashed line
+            lineGroup.append('line')
+            .attr('x1', start.x).attr('y1', start.y)
+            .attr('x2', end.x).attr('y2', end.y)
+            .attr('stroke', colors.gatewayLineColor)
+            .attr('stroke-width', 1.5)
+            .attr('stroke-dasharray', '4,2')
+            .style('pointer-events', 'none');
 
-             if (start && end) {
-                 bgGroup.append('line')
-                    .attr('class', 'planned-gateway-line')
-                    .attr('x1', start.x)
-                    .attr('y1', start.y)
-                    .attr('x2', end.x)
-                    .attr('y2', end.y)
-                    .attr('stroke', '#f7a600') 
-                    .attr('stroke-width', 2)
-                    .attr('stroke-dasharray', '6,3')
-                    .attr('pointer-events', 'none');
+            // The invisible wider interaction line
+            lineGroup.append('line')
+            .attr('x1', start.x).attr('y1', start.y)
+            .attr('x2', end.x).attr('y2', end.y)
+            .attr('stroke', 'transparent')
+            .attr('stroke-width', 8)
+            .style('cursor', 'pointer')
+            .on('mouseover', (event) => {
+                d3.selectAll('.gateway-detail-tooltip').remove();
+                const tooltip = d3.select('body').append('div')
+                .attr('class', 'gateway-detail-tooltip')
+                .style('left', (event.pageX + 15) + 'px')
+                .style('top', (event.pageY - 10) + 'px');
 
-                 const midX = (start.x + end.x) / 2;
-                 const midY = (start.y + end.y) / 2;
-
-                 fgGroup.append('text')
-                    .attr('class', 'planned-gateway-label')
-                    .attr('x', midX)
-                    .attr('y', midY)
-                    .attr('text-anchor', 'middle') 
-                    .attr('dominant-baseline', 'middle') 
-                    .attr('fill', '#f7a600') 
-                    .attr('stroke', '#000000') 
-                    .attr('stroke-width', '3px') 
-                    .attr('paint-order', 'stroke')
-                    .attr('font-size', '10px')
-                    .attr('font-weight', 'bold')
-                    .style('pointer-events', 'none')
-                    .text(`${gw.distance} pc`);
-             }
-        });
-    }
-
-  }, [mapRef, existingGateways, gatewayData.plannedGateways, mapRenderKey, activeMode]);
+                let content = '<div class="gateway-tooltip-container">';
+                pair.links.forEach(link => {
+                content += `
+                    <div class="gateway-col">
+                    <div class="gw-title">${link.Name}</div>
+                    <div class="gw-stat ${link.OperationalState === 'OPERATIONAL' ? 'ops' : 'err'}">${link.OperationalState.replace('_', ' ')}</div>
+                    <div class="gw-info">Volume: T${link.MaxShipVolume || 1}</div>
+                    <div class="gw-info">Cost: ${link.UsageAmount || 0} ${link.UsageCurrency || ''}</div>
+                    </div>`;
+                });
+                content += '</div>';
+                tooltip.html(content);
+            })
+            .on('mouseout', () => {
+                d3.selectAll('.gateway-detail-tooltip').remove();
+            });
+        }
+    });
+    console.log(`GatewayLayer: Successfully drawn ${drawnCount} out of ${existingGateways.length} lines.`);
+  }, [existingGateways, mapRenderKey]);
 
   return null;
 };

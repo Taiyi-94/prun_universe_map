@@ -15,8 +15,8 @@ export const GATEWAY_STRATEGIES = {
 const MapModeContext = createContext();
 
 export const MapModeProvider = ({ children }) => {
-  const { universeData } = useContext(GraphContext); 
-  
+  const { universeData, planetData } = useContext(GraphContext); 
+
   const [activeMode, setActiveMode] = useState(MAP_MODES.STANDARD);
   const [existingGateways, setExistingGateways] = useState([]);
   const [hoveredSystemId, setHoveredSystemId] = useState(null);
@@ -160,6 +160,62 @@ export const MapModeProvider = ({ children }) => {
       plannedGateways: [] 
     }));
   }, []);
+
+  const processGateways = useCallback((data) => {
+    if (!universeData || !planetData) return [];
+
+    const systemMap = {};
+    
+    // 1. Map System Natural IDs (e.g., "ZV-307") to System IDs
+    Object.entries(universeData).forEach(([sysId, sysArr]) => {
+      systemMap[sysArr[0].NaturalId] = sysId;
+    });
+
+    // 2. Map Planet Natural IDs (e.g., "ZV-307c") to parent System IDs
+    Object.entries(planetData).forEach(([sysId, planets]) => {
+      planets.forEach(p => {
+        systemMap[p.PlanetNaturalId] = sysId;
+      });
+    });
+
+    const gatewaysById = {};
+    data.forEach(g => gatewaysById[g.GatewayId] = g);
+
+    const pairs = {};
+    data.forEach(g => {
+      if (!g.OutgoingLink) return;
+      const targetG = gatewaysById[g.OutgoingLink];
+      if (!targetG) return;
+
+      // Lookup using the full Planet ID (e.g., "LB-476b")
+      const sourceSysId = systemMap[g.LocationNaturalId];
+      const targetSysId = systemMap[targetG.LocationNaturalId];
+
+      if (sourceSysId && targetSysId) {
+        const pairId = [sourceSysId, targetSysId].sort().join('-');
+        if (!pairs[pairId]) pairs[pairId] = { sourceSysId, targetSysId, links: [] };
+        
+        // Prevent duplicate directional links in the same pair
+        if (!pairs[pairId].links.find(l => l.GatewayId === g.GatewayId)) {
+          pairs[pairId].links.push(g);
+        }
+      }
+    });
+    return Object.values(pairs);
+  }, [universeData, planetData]);
+
+  useEffect(() => {
+    if (!universeData || Object.keys(universeData).length === 0 || 
+        !planetData || Object.keys(planetData).length === 0) return;
+
+    fetch(`${process.env.PUBLIC_URL}/gateways.json`)
+      .then(response => response.json())
+      .then(data => {
+        const processed = processGateways(data);
+        setExistingGateways(processed);
+      })
+      .catch(err => console.error("Failed to load gateways:", err));
+  }, [universeData, planetData, processGateways]);
 
   return (
     <MapModeContext.Provider value={{
