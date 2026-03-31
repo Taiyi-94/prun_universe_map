@@ -88,7 +88,30 @@ export const MapModeProvider = ({ children }) => {
     }
     else if (gatewayData.strategy === GATEWAY_STRATEGIES.DUAL) {
       if (gatewayData.originB) {
-        const results = findBestMidpoints(gatewayData.originA, gatewayData.originB, universeData);
+        // We map through universeData to calculate 3D Direct and FTL distances for both legs
+        const results = Object.values(universeData).map(sysArr => {
+          const target = sysArr[0];
+          if (target.SystemId === gatewayData.originA.SystemId || target.SystemId === gatewayData.originB.SystemId) return null;
+
+          const distA = calculate3DDistance(gatewayData.originA, target);
+          const distB = calculate3DDistance(gatewayData.originB, target);
+          
+          // Only suggest midpoints where both legs are within jump range (optional, but realistic)
+          if (distA > 25 || distB > 25) return null;
+
+          return {
+            system: target,
+            distA,
+            distB,
+            totalDist: distA + distB,
+            ftlDistA: getFtlDistance(gatewayData.originA.SystemId, target.SystemId),
+            ftlDistB: getFtlDistance(target.SystemId, gatewayData.originB.SystemId)
+          };
+        })
+        .filter(Boolean)
+        .sort((a, b) => a.totalDist - b.totalDist)
+        .slice(0, 50);
+
         setCandidateList(results);
       } else {
         setCandidateList([]);
@@ -138,15 +161,16 @@ export const MapModeProvider = ({ children }) => {
     });
   }, []);
 
-  // New: Add Dual Route (A->Mid + Mid->B)
-  const addDualRoute = useCallback((originA, originB, midpoint) => {
+  // Add Dual Route (A->Mid + Mid->B)
+  const addDualRoute = useCallback((originA, originB, midpoint, ftlDistA, ftlDistB) => {
       const route1 = {
           id: Date.now().toString() + "_1",
           sourceId: originA.SystemId,
           targetId: midpoint.SystemId,
           source: originA.Name,
           target: midpoint.Name,
-          distance: calculate3DDistance(originA, midpoint).toFixed(2)
+          distance: calculate3DDistance(originA, midpoint).toFixed(2),
+          ftlDistance: ftlDistA !== Infinity ? ftlDistA.toFixed(1) : "Infinity"
       };
       
       const route2 = {
@@ -155,7 +179,8 @@ export const MapModeProvider = ({ children }) => {
           targetId: originB.SystemId,
           source: midpoint.Name,
           target: originB.Name,
-          distance: calculate3DDistance(midpoint, originB).toFixed(2)
+          distance: calculate3DDistance(midpoint, originB).toFixed(2),
+          ftlDistance: ftlDistB !== Infinity ? ftlDistB.toFixed(1) : "Infinity"
       };
 
       // Add both using functional update to ensure state consistency

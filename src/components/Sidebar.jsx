@@ -524,8 +524,15 @@ const Sidebar = () => {
                                >
                                    <div style={{display:'flex', justifyContent:'space-between'}}>
                                       <span style={{fontWeight:'bold', color:'#f7a600'}}>{cand.system.Name}</span>
-                                      <button className="delete-gw-btn" title="Add Dual Route" onClick={() => addDualRoute(gatewayData.originA, gatewayData.originB, cand.system)}>
-                                          <Plus size={16} />
+                                      <button className="delete-gw-btn" title="Add Dual Route" 
+                                          onClick={() => addDualRoute(
+                                              gatewayData.originA, 
+                                              gatewayData.originB, 
+                                              cand.system, 
+                                              cand.ftlDistA, 
+                                              cand.ftlDistB
+                                          )}>
+                                        <Plus size={16} />
                                       </button>
                                    </div>
                                    <div style={{display:'flex', justifyContent:'space-between', fontSize:'11px', marginTop:'2px', color:'#aaa'}}>
