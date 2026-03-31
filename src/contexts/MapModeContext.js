@@ -162,47 +162,43 @@ export const MapModeProvider = ({ children }) => {
   }, []);
 
   const processGateways = useCallback((data) => {
-    if (!universeData || !planetData) return [];
+    if (!universeData || !planetData || Object.keys(planetData).length === 0) return [];
 
     const systemMap = {};
-    
-    // 1. Map System Natural IDs (e.g., "ZV-307") to System IDs
-    Object.entries(universeData).forEach(([sysId, sysArr]) => {
-      systemMap[sysArr[0].NaturalId] = sysId;
+    Object.entries(universeData).forEach(([id, arr]) => systemMap[arr[0].NaturalId] = id);
+    Object.entries(planetData).forEach(([id, planets]) => {
+      planets.forEach(p => systemMap[p.PlanetNaturalId] = id);
     });
 
-    // 2. Map Planet Natural IDs (e.g., "ZV-307c") to parent System IDs
-    Object.entries(planetData).forEach(([sysId, planets]) => {
-      planets.forEach(p => {
-        systemMap[p.PlanetNaturalId] = sysId;
-      });
-    });
-
-    const gatewaysById = {};
-    data.forEach(g => gatewaysById[g.GatewayId] = g);
-
+    const gatewaysById = Object.fromEntries(data.map(g => [g.GatewayId, g]));
     const pairs = {};
+
     data.forEach(g => {
       if (!g.OutgoingLink) return;
       const targetG = gatewaysById[g.OutgoingLink];
       if (!targetG) return;
 
-      // Lookup using the full Planet ID (e.g., "LB-476b")
-      const sourceSysId = systemMap[g.LocationNaturalId];
-      const targetSysId = systemMap[targetG.LocationNaturalId];
+      const sId = systemMap[g.LocationNaturalId];
+      const tId = systemMap[targetG.LocationNaturalId];
 
-      if (sourceSysId && targetSysId) {
-        const pairId = [sourceSysId, targetSysId].sort().join('-');
-        if (!pairs[pairId]) pairs[pairId] = { sourceSysId, targetSysId, links: [] };
-        
-        // Prevent duplicate directional links in the same pair
-        if (!pairs[pairId].links.find(l => l.GatewayId === g.GatewayId)) {
-          pairs[pairId].links.push(g);
+      if (sId && tId) {
+        const pId = [sId, tId].sort().join('-');
+        if (!pairs[pId]) pairs[pId] = { sourceSysId: sId, targetSysId: tId, links: [] };
+        if (!pairs[pId].links.find(l => l.GatewayId === g.GatewayId)) {
+          pairs[pId].links.push(g);
         }
       }
     });
     return Object.values(pairs);
   }, [universeData, planetData]);
+
+  useEffect(() => {
+    if (!universeData || !planetData || Object.keys(planetData).length === 0) return;
+    fetch(`${process.env.PUBLIC_URL}/gateways.json`)
+      .then(res => res.json())
+      .then(data => setExistingGateways(processGateways(data)))
+      .catch(err => console.error("Gateway fetch error:", err));
+  }, [universeData, planetData, processGateways]);
 
   useEffect(() => {
     if (!universeData || Object.keys(universeData).length === 0 || 
