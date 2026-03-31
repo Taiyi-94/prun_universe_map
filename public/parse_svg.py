@@ -4,36 +4,29 @@ import json
 def parse_svg(svg_file):
     tree = ET.parse(svg_file)
     root = tree.getroot()
-
+    # Load universe data for real 3D distance lookup
+    u = {s['SystemId']: s for s in json.load(open('./prun_universe_data.json'))}
+    
     namespace = {'svg': 'http://www.w3.org/2000/svg', 'inkscape': 'http://www.inkscape.org/namespaces/inkscape'}
+    systems, edges = {}, []
 
-    systems = {}
-    edges = []
-
-    # Extract systems (nodes)
     for rect in root.findall('.//svg:rect', namespace):
-        system_id = rect.get('id')
-        x = float(rect.get('x'))
-        y = float(rect.get('y'))
-        systems[system_id] = {'x': x, 'y': y}
+        systems[rect.get('id')] = {'x': float(rect.get('x')), 'y': float(rect.get('y'))}
 
-    # Extract edges (connections)
     for path in root.findall('.//svg:path', namespace):
         start_id = path.get('{http://www.inkscape.org/namespaces/inkscape}connection-start').lstrip('#')
         end_id = path.get('{http://www.inkscape.org/namespaces/inkscape}connection-end').lstrip('#')
-        if start_id in systems and end_id in systems:
-            # Calculate distance between systems
-            x1, y1 = systems[start_id]['x'], systems[start_id]['y']
-            x2, y2 = systems[end_id]['x'], systems[end_id]['y']
-            distance = ((x2 - x1)**2 + (y2 - y1)**2) ** 0.5
+        if start_id in u and end_id in u:
+            u1, u2 = u[start_id], u[end_id]
+            # Replace 2D math with 3D math from universe data / 12.0 conversion
+            distance = ((u1['PositionX']-u2['PositionX'])**2 + (u1['PositionY']-u2['PositionY'])**2 + (u1['PositionZ']-u2['PositionZ'])**2)**0.5 / 12.0
             edges.append({'start': start_id, 'end': end_id, 'distance': distance})
 
     return systems, edges
 
 def save_graph_data(systems, edges, output_file):
-    graph = {'systems': systems, 'edges': edges}
     with open(output_file, 'w') as f:
-        json.dump(graph, f, indent=2)
+        json.dump({'systems': systems, 'edges': edges}, f, indent=2)
 
 if __name__ == '__main__':
     svg_file = './PrUn_universe_map_normalized.svg'

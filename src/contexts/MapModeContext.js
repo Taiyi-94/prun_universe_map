@@ -1,6 +1,7 @@
 import React, { createContext, useState, useContext, useCallback, useEffect } from 'react';
 import { GraphContext } from './GraphContext';
 import { calculate3DDistance, findClosestSystems, findBestMidpoints } from '../utils/distanceUtils';
+import { find_path } from 'dijkstrajs';
 
 export const MAP_MODES = {
   STANDARD: 'STANDARD',
@@ -15,7 +16,7 @@ export const GATEWAY_STRATEGIES = {
 const MapModeContext = createContext();
 
 export const MapModeProvider = ({ children }) => {
-  const { universeData, planetData } = useContext(GraphContext); 
+  const { universeData, planetData, graph } = useContext(GraphContext); 
 
   const [activeMode, setActiveMode] = useState(MAP_MODES.STANDARD);
   const [existingGateways, setExistingGateways] = useState([]);
@@ -30,6 +31,27 @@ export const MapModeProvider = ({ children }) => {
 
   const [candidateList, setCandidateList] = useState([]);
 
+  const getFtlDistance = useCallback((sId, tId) => {
+    if (!graph?.edges) return Infinity;
+    
+    const graphNodes = {};
+    graph.edges.forEach(edge => {
+      if (!graphNodes[edge.start]) graphNodes[edge.start] = {};
+      if (!graphNodes[edge.end]) graphNodes[edge.end] = {};
+      graphNodes[edge.start][edge.end] = edge.distance;
+      graphNodes[edge.end][edge.start] = edge.distance;
+    });
+
+    try {
+      const path = find_path(graphNodes, sId, tId);
+      const rawSum = path.reduce((sum, node, i) => 
+      i < path.length - 1 ? sum + graphNodes[node][path[i+1]] : sum, 0);
+      return rawSum;
+    } catch (e) { 
+      return Infinity; 
+    }
+  }, [graph]);
+
   // Fetch Existing Gateways
   useEffect(() => {
     fetch(`${process.env.PUBLIC_URL}/gateways.json`)
@@ -40,7 +62,7 @@ export const MapModeProvider = ({ children }) => {
 
   // Calculation Effect
   useEffect(() => {
-    if (activeMode !== MAP_MODES.GATEWAY || !universeData) return;
+    if (activeMode !== MAP_MODES.GATEWAY || !universeData || !graph?.edges) return;
 
     if (!gatewayData.originA) {
       setCandidateList([]);
@@ -48,9 +70,22 @@ export const MapModeProvider = ({ children }) => {
     }
 
     if (gatewayData.strategy === GATEWAY_STRATEGIES.SINGLE) {
-      const results = findClosestSystems(gatewayData.originA, universeData);
+      const origin = gatewayData.originA;
+      const results = Object.values(universeData).map(sysArr => {
+        const target = sysArr[0];
+        if (target.SystemId === origin.SystemId) return null;
+        const direct = calculate3DDistance(origin, target);
+        if (direct > 25) return null;
+        
+        return { 
+          system: target, 
+          distance: direct, 
+          ftlDistance: getFtlDistance(origin.SystemId, target.SystemId) 
+        };
+      }).filter(Boolean).sort((a, b) => a.distance - b.distance);
+      
       setCandidateList(results);
-    } 
+    }
     else if (gatewayData.strategy === GATEWAY_STRATEGIES.DUAL) {
       if (gatewayData.originB) {
         const results = findBestMidpoints(gatewayData.originA, gatewayData.originB, universeData);
@@ -59,7 +94,7 @@ export const MapModeProvider = ({ children }) => {
         setCandidateList([]);
       }
     }
-  }, [gatewayData.originA, gatewayData.originB, gatewayData.strategy, activeMode, universeData]);
+  }, [gatewayData.originA, gatewayData.originB, gatewayData.strategy, activeMode, universeData, getFtlDistance, graph]);
 
 
   // Actions
@@ -223,6 +258,7 @@ export const MapModeProvider = ({ children }) => {
       setGatewayData,
       setGatewayStrategy,
       setOriginById,
+      getFtlDistance,
       addPlannedGateway,
       addDualRoute, 
       removePlannedGateway,

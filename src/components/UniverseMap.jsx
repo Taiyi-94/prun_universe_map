@@ -28,7 +28,7 @@ const UniverseMap = React.memo(() => {
   const { overlayProgram } = useCogcOverlay();
   const { searchResults, isRelativeThreshold } = useContext(SearchContext);
   
-  const { activeMode, gatewayData, setOriginById, addPlannedGateway, resetSelection, hoveredSystemId } = useMapMode();
+  const { activeMode, gatewayData, setOriginById, addPlannedGateway, resetSelection, hoveredSystemId, getFtlDistance } = useMapMode();
 
   const svgRef = useRef(null);
   const graphRef = useRef(null);
@@ -53,13 +53,16 @@ const UniverseMap = React.memo(() => {
                     const targetSystem = universeData[systemId][0];
                     const dist = calculate3DDistance(gatewayData.originA, targetSystem);
                     
+                    const ftlDist = getFtlDistance(gatewayData.originA.SystemId, targetSystem.SystemId);
+
                     addPlannedGateway({
                         id: Date.now().toString(),
                         sourceId: gatewayData.originA.SystemId,
                         targetId: targetSystem.SystemId,
                         source: gatewayData.originA.Name,
                         target: targetSystem.Name,
-                        distance: dist.toFixed(2)
+                        distance: dist.toFixed(2),
+                        ftlDistance: ftlDist !== Infinity ? ftlDist.toFixed(1) : "Infinity"
                     });
                     
                     resetSelection();
@@ -79,7 +82,7 @@ const UniverseMap = React.memo(() => {
             }
         }
     }
-  }, [activeMode, gatewayData, highlightSelectedSystem, setOriginById, addPlannedGateway, resetSelection, universeData]);
+  }, [activeMode, gatewayData, highlightSelectedSystem, setOriginById, addPlannedGateway, resetSelection, universeData, getFtlDistance]);
 
   const attachClickEvents = useCallback((g) => {
     g.selectAll('rect').on('click', function() {

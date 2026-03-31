@@ -495,7 +495,8 @@ const Sidebar = () => {
                                       targetId: cand.system.SystemId,
                                       source: gatewayData.originA.Name,
                                       target: cand.system.Name,
-                                      distance: cand.distance.toFixed(2)
+                                      distance: cand.distance.toFixed(2),
+                                      ftlDistance: cand.ftlDistance.toFixed(1)
                                   })}>
                                       <Plus size={16} />
                                   </button>
@@ -541,21 +542,37 @@ const Sidebar = () => {
       </div>
 
       <div className="planned-gateways-section">
-          <h4>Planned Gateways</h4>
-          {gatewayData.plannedGateways.length === 0 ? (
-              <p className="placeholder-text">No gateways planned yet.</p>
-          ) : (
-              <ul className="planned-list" style={{listStyle:'none', padding:0}}>
-                  {gatewayData.plannedGateways.map(gw => (
-                      <li key={gw.id} className="planned-gateway-item">
-                          <span>{gw.source} ↔ {gw.target}</span>
-                          <span className="dist">({gw.distance}pc)</span>
-                          <button className="delete-gw-btn" onClick={() => removePlannedGateway(gw.id)}>
-                              <X size={14} />
-                          </button>
-                      </li>
-                  ))}
-              </ul>
+        <h4>Planned Gateways</h4>
+        {gatewayData.plannedGateways.length === 0 ? (
+            <p className="placeholder-text">No gateways planned yet.</p>
+        ) : (
+            <ul className="planned-list" style={{listStyle:'none', padding:0}}>
+                {gatewayData.plannedGateways.map(gw => {
+                    const savings = gw.ftlDistance && gw.ftlDistance !== "Infinity" 
+                        ? Math.round((1 - parseFloat(gw.distance) / parseFloat(gw.ftlDistance)) * 100) 
+                        : 0;
+
+                    return (
+                        <li key={gw.id} className="planned-gateway-item" style={{flexDirection: 'column', alignItems: 'flex-start', gap: '4px'}}>
+                            <div style={{display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center'}}>
+                                <span style={{fontWeight: 'bold', color: '#f7a600'}}>{gw.source} ↔ {gw.target}</span>
+                                <button className="delete-gw-btn" onClick={() => removePlannedGateway(gw.id)}>
+                                    <X size={14} />
+                                </button>
+                            </div>
+                            <div style={{fontSize: '11px', color: '#bbb'}}>
+                                Direct: <span style={{color: '#fff'}}>{gw.distance} pc</span> 
+                                {" "} FTL Path: <span style={{color: '#fff'}}>{gw.ftlDistance} pc</span>
+                            </div>
+                            {savings > 0 && (
+                                <div style={{fontSize: '11px', color: '#66ff66', fontWeight: 'bold'}}>
+                                    Saves {savings}%
+                                </div>
+                            )}
+                        </li>
+                    );
+                })}
+            </ul>
           )}
       </div>
     </div>
