@@ -20,26 +20,34 @@ const GatewayLayer = ({ mapRef, mapRenderKey }) => {
             };
         };
 
-        // 1. Locate or create the Gateway Layer
-        let gwGroup = g.select('.gateway-layer');
-        
-        if (gwGroup.empty()) {
-            gwGroup = g.append('g').attr('class', 'gateway-layer');
-        } else {
-            gwGroup.raise();
+        // --- 1. Sandwiched Background Layer (Existing Gateways) ---
+        let bgGroup = g.select('.gateway-bg-layer');
+        if (bgGroup.empty()) {
+            const firstSystemNode = g.select('rect:not(#rect1)').node();
+            if (firstSystemNode) {
+                bgGroup = g.insert('g', () => firstSystemNode).attr('class', 'gateway-bg-layer');
+            } else {
+                bgGroup = g.append('g').attr('class', 'gateway-bg-layer');
+            }
         }
-        
-        gwGroup.selectAll('*').remove();
+        bgGroup.selectAll('*').remove();
 
-        // 2. Render Existing Gateways (API Data)
+        // --- 2. Top-level Foreground Layer (Planned Gateways) ---
+        let fgGroup = g.select('.gateway-fg-layer');
+        if (fgGroup.empty()) {
+            fgGroup = g.append('g').attr('class', 'gateway-fg-layer');
+        }
+        fgGroup.raise(); // Ensure it stays at the very front
+        fgGroup.selectAll('*').remove();
+
+        // --- 3. Render Existing Gateways into Background ---
         existingGateways.forEach(pair => {
             const start = getCoords(pair.sourceSysId);
             const end = getCoords(pair.targetSysId);
             
             if (start && end) {
-                const linkItem = gwGroup.append('g');
+                const linkItem = bgGroup.append('g');
 
-                // Visible dashed line
                 linkItem.append('line')
                     .attr('x1', start.x).attr('y1', start.y)
                     .attr('x2', end.x).attr('y2', end.y)
@@ -48,7 +56,6 @@ const GatewayLayer = ({ mapRef, mapRenderKey }) => {
                     .attr('stroke-dasharray', '4,3')
                     .style('pointer-events', 'none');
 
-                // Interaction line
                 linkItem.append('line')
                     .attr('x1', start.x).attr('y1', start.y)
                     .attr('x2', end.x).attr('y2', end.y)
@@ -71,7 +78,7 @@ const GatewayLayer = ({ mapRef, mapRenderKey }) => {
                             <div class="gateway-col">
                                 <div class="gw-title">${l.Name}</div>
                                 <div class="gw-stat" style="color:${isOps ? '#66ff66' : '#ff6666'}">
-                                ${l.OperationalState.replace(/_/g, ' ')}
+                                    ${l.OperationalState.replace(/_/g, ' ')}
                                 </div>
                                 <div class="gw-info">Volume: T${l.MaxShipVolume || 1}</div>
                                 <div class="gw-info">Cost: ${l.UsageAmount || 0} ${l.UsageCurrency || ''}</div>
@@ -85,16 +92,15 @@ const GatewayLayer = ({ mapRef, mapRenderKey }) => {
             }
         });
 
-        // 3. Render Planned Gateways (Golden Dashed Lines)
+        // --- 4. Render Planned Gateways into Foreground ---
         if (gatewayData.plannedGateways && gatewayData.plannedGateways.length > 0) {
             gatewayData.plannedGateways.forEach(gw => {
                 const start = getCoords(gw.sourceId);
                 const end = getCoords(gw.targetId);
 
                 if (start && end) {
-                    const plannedItem = gwGroup.append('g').attr('class', 'planned-gateway-item-layer');
+                    const plannedItem = fgGroup.append('g').attr('class', 'planned-gateway-item-layer');
 
-                    // Golden Dashed Line
                     plannedItem.append('line')
                         .attr('x1', start.x).attr('y1', start.y)
                         .attr('x2', end.x).attr('y2', end.y)
@@ -103,7 +109,6 @@ const GatewayLayer = ({ mapRef, mapRenderKey }) => {
                         .attr('stroke-dasharray', '6,3')
                         .style('pointer-events', 'none');
 
-                    // Distance Label
                     const midX = (start.x + end.x) / 2;
                     const midY = (start.y + end.y) / 2;
 
