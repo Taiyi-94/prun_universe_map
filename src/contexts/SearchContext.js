@@ -166,20 +166,26 @@ export const SearchProvider = ({ children }) => {
         // Apply factor check
         let factorCheck;
         if (isRelativeThreshold) {
-          let maxFactor;
           if (resourceTypeFilter === 'ALL') {
             // Use global maximum when 'ALL' is selected
-            maxFactor = Math.max(...results
+            const phaseMultiplier = {
+              'LIQUID': 1867.7/32.32, // 36 RIG on AM-528g
+              'GASEOUS': 307.86/8.34, // 23 COL on CG-339b
+              'MINERAL': 1009.31/41.92, // 15 EXT on AW-284f
+            };
+            const maxFactor = Math.max(...results
               .filter(r => r.type === 'material')
-              .map(r => r.factor));
+              .map(r => r.factor * phaseMultiplier[r.resourceType]));
+            const relativeFactor = result.factor * phaseMultiplier[result.resourceType] / maxFactor;
+            factorCheck = relativeFactor >= resourceThreshold;
           } else {
             // Use type-specific maximum when a specific type is selected
-            maxFactor = Math.max(...results
+            const maxFactor = Math.max(...results
               .filter(r => r.type === 'material' && r.resourceType === resourceTypeFilter)
               .map(r => r.factor));
+            const relativeFactor = result.factor / maxFactor;
+            factorCheck = relativeFactor >= resourceThreshold;
           }
-          const relativeFactor = result.factor / maxFactor;
-          factorCheck = relativeFactor >= resourceThreshold;
         } else {
           factorCheck = result.factor >= resourceThreshold;
         }

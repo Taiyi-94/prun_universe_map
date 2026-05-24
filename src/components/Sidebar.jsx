@@ -362,14 +362,19 @@ const Sidebar = () => {
     }
   };
 
+  const phaseMultiplier = {
+    'LIQUID': 1867.7/32.32, // 36 RIG on AM-528g
+    'GASEOUS': 307.86/8.34, // 23 COL on CG-339b
+    'MINERAL': 1009.31/41.92, // 15 EXT on AW-284f
+  };
   const maxConcentrations = useMemo(() => {
     const maxConc = {};
     if (planetData) {
       Object.values(planetData).flat().forEach(planet => {
         planet.Resources.forEach(resource => {
-          const key = `${resource.MaterialId}-${resource.ResourceType}`;
-          if (!maxConc[key] || resource.Factor > maxConc[key]) {
-            maxConc[key] = resource.Factor;
+          const conc = resource.Factor * phaseMultiplier[resource.ResourceType];
+          if (!maxConc[resource.MaterialId] || conc > maxConc[resource.MaterialId]) {
+            maxConc[resource.MaterialId] = conc;
           }
         });
       });
@@ -378,10 +383,9 @@ const Sidebar = () => {
   }, [planetData]);
 
   const ConcentrationBar = ({ concentration, materialId, resourceType }) => {
-    const key = `${materialId}-${resourceType}`;
-    const maxConcentration = maxConcentrations[key] || concentration;
+    const maxConcentration = maxConcentrations[materialId] || concentration;
     const percentage = isRelativeThreshold
-      ? (concentration / maxConcentration) * 100
+      ? (concentration * phaseMultiplier[resourceType] / maxConcentration) * 100
       : concentration * 100;
     const hue = (percentage / 100) * 120; 
     const backgroundColor = `hsl(${hue}, 100%, 50%)`;
@@ -433,7 +437,6 @@ const Sidebar = () => {
               </h3>
               <ul>
                 {planet.Resources.map((resource, idx) => {
-                  const key = `${resource.MaterialId}-${resource.ResourceType}`;
                   const shouldHighlightResource = isResourceHighlighted(resource.MaterialId, planet.PlanetNaturalId);
                   
                   return (
@@ -453,7 +456,7 @@ const Sidebar = () => {
                       <ConcentrationBar concentration={resource.Factor} materialId={resource.MaterialId} resourceType={resource.ResourceType} />
                       <span className="resource-percentage">
                         {isRelativeThreshold
-                          ? ((resource.Factor / maxConcentrations[key]) * 100).toFixed(2)
+                          ? (resource.Factor * phaseMultiplier[resource.ResourceType] / maxConcentrations[resource.MaterialId] * 100).toFixed(2)
                           : (resource.Factor * 100).toFixed(2)}%
                       </span>
                     </li>
