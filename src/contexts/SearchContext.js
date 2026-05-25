@@ -149,6 +149,11 @@ export const SearchProvider = ({ children }) => {
       });
     }
 
+    const phaseMultiplier = {
+      'LIQUID': 1867.7/32.32, // 36 RIG on AM-528g
+      'GASEOUS': 307.86/8.34, // 23 COL on CG-339b
+      'MINERAL': 1009.31/41.92, // 15 EXT on AW-284f
+    };
     const filteredResults = results.filter(result => {
       const planet = planetData[result.systemId].find(p => p.PlanetNaturalId === result.planetId);
 
@@ -168,11 +173,6 @@ export const SearchProvider = ({ children }) => {
         if (isRelativeThreshold) {
           if (resourceTypeFilter === 'ALL') {
             // Use global maximum when 'ALL' is selected
-            const phaseMultiplier = {
-              'LIQUID': 1867.7/32.32, // 36 RIG on AM-528g
-              'GASEOUS': 307.86/8.34, // 23 COL on CG-339b
-              'MINERAL': 1009.31/41.92, // 15 EXT on AW-284f
-            };
             const maxFactor = Math.max(...results
               .filter(r => r.type === 'material')
               .map(r => r.factor * phaseMultiplier[r.resourceType]));
@@ -193,6 +193,37 @@ export const SearchProvider = ({ children }) => {
         if (!factorCheck) {
           return false;
         }
+      } else if (resourceThreshold > 0) {
+        let factorCheck;
+        if (isRelativeThreshold) {
+          const maxPerResource = {};
+          for (const planet of Object.values(planetData).flat())
+            for (const resource of planet.Resources) {
+              const factor = resource.Factor * phaseMultiplier[resource.ResourceType];
+              if (!maxPerResource[resource.MaterialId] || factor > maxPerResource[resource.MaterialId])
+                maxPerResource[resource.MaterialId] = factor;
+            }
+
+          factorCheck = planet.Resources.some(resource => {
+            const factor = resource.Factor * phaseMultiplier[resource.ResourceType];
+            return factor / maxPerResource[resource.MaterialId] >= resourceThreshold;
+          });
+        } else {
+          const maxPerResource = {};
+          for (const planet of Object.values(planetData).flat())
+            for (const resource of planet.Resources) {
+              const factor = resource.Factor;
+              if (!maxPerResource[resource.MaterialId] || factor > maxPerResource[resource.MaterialId])
+                maxPerResource[resource.MaterialId] = factor;
+            }
+
+          factorCheck = planet.Resources.some(resource => {
+            const factor = resource.Factor;
+            return factor / maxPerResource[resource.MaterialId] >= resourceThreshold;
+          });
+        }
+        if (!factorCheck)
+          return false;
       }
 
       const planetTypeCondition =
