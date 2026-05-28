@@ -7,6 +7,7 @@ import { SelectionContext } from '../contexts/SelectionContext';
 import { useCogcOverlay } from '../contexts/CogcOverlayContext';
 import { useMapMode, MAP_MODES, GATEWAY_STRATEGIES } from '../contexts/MapModeContext';
 import { cogcPrograms } from '../constants/cogcPrograms';
+import { phaseMultiplier } from '../constants/phaseMultiplier';
 import { colors } from '../config/config';
 
 // --- Reusing Existing Helper Components (ResourceIcon, etc.) ---
@@ -362,11 +363,6 @@ const Sidebar = () => {
     }
   };
 
-  const phaseMultiplier = {
-    'LIQUID': 1867.7/32.32, // 36 RIG on AM-528g
-    'GASEOUS': 307.86/8.34, // 23 COL on CG-339b
-    'MINERAL': 1009.31/41.92, // 15 EXT on AW-284f
-  };
   const maxConcentrations = useMemo(() => {
     const maxConc = {};
     if (planetData) {

@@ -1,5 +1,6 @@
 import React, { createContext, useState, useCallback, useContext } from 'react';
 import { GraphContext } from './GraphContext';
+import { phaseMultiplier } from '../constants/phaseMultiplier';
 import { highlightSearchResults, clearHighlights } from '../utils/searchUtils';
 
 
@@ -149,11 +150,6 @@ export const SearchProvider = ({ children }) => {
       });
     }
 
-    const phaseMultiplier = {
-      'LIQUID': 1867.7/32.32, // 36 RIG on AM-528g
-      'GASEOUS': 307.86/8.34, // 23 COL on CG-339b
-      'MINERAL': 1009.31/41.92, // 15 EXT on AW-284f
-    };
     const filteredResults = results.filter(result => {
       const planet = planetData[result.systemId].find(p => p.PlanetNaturalId === result.planetId);
 
