@@ -1,4 +1,4 @@
-import React, { createContext, useState, useCallback, useContext } from 'react';
+import React, { createContext, useState, useCallback, useContext, useMemo } from 'react';
 import { GraphContext } from './GraphContext';
 import { phaseMultiplier } from '../constants/phaseMultiplier';
 import { highlightSearchResults, clearHighlights } from '../utils/searchUtils';
@@ -46,6 +46,21 @@ export const SearchProvider = ({ children }) => {
   const [resourceTypeFilter, setResourceTypeFilter] = useState('ALL');
   const [companySearchTerm, setCompanySearchTerm] = useState('');
   const [isCompanySearch, setIsCompanySearch] = useState(false);
+
+  // Phase-weighted maximum factor per material across the whole universe,
+  // used to normalize relative concentration thresholds.
+  const maxFactorPerMaterial = useMemo(() => {
+    const maxPerResource = {};
+    if (planetData) {
+      for (const planet of Object.values(planetData).flat())
+        for (const resource of planet.Resources) {
+          const factor = resource.Factor * phaseMultiplier[resource.ResourceType];
+          if (!maxPerResource[resource.MaterialId] || factor > maxPerResource[resource.MaterialId])
+            maxPerResource[resource.MaterialId] = factor;
+        }
+    }
+    return maxPerResource;
+  }, [planetData]);
 
 
   const handleSystemSearch = useCallback((searchTerm) => {
@@ -192,31 +207,13 @@ export const SearchProvider = ({ children }) => {
       } else if (resourceThreshold > 0) {
         let factorCheck;
         if (isRelativeThreshold) {
-          const maxPerResource = {};
-          for (const planet of Object.values(planetData).flat())
-            for (const resource of planet.Resources) {
-              const factor = resource.Factor * phaseMultiplier[resource.ResourceType];
-              if (!maxPerResource[resource.MaterialId] || factor > maxPerResource[resource.MaterialId])
-                maxPerResource[resource.MaterialId] = factor;
-            }
-
           factorCheck = planet.Resources.some(resource => {
             const factor = resource.Factor * phaseMultiplier[resource.ResourceType];
-            return factor / maxPerResource[resource.MaterialId] >= resourceThreshold;
+            return factor / maxFactorPerMaterial[resource.MaterialId] >= resourceThreshold;
           });
         } else {
-          const maxPerResource = {};
-          for (const planet of Object.values(planetData).flat())
-            for (const resource of planet.Resources) {
-              const factor = resource.Factor;
-              if (!maxPerResource[resource.MaterialId] || factor > maxPerResource[resource.MaterialId])
-                maxPerResource[resource.MaterialId] = factor;
-            }
-
-          factorCheck = planet.Resources.some(resource => {
-            const factor = resource.Factor;
-            return factor / maxPerResource[resource.MaterialId] >= resourceThreshold;
-          });
+          factorCheck = planet.Resources.some(resource =>
+            resource.Factor >= resourceThreshold);
         }
         if (!factorCheck)
           return false;
@@ -285,7 +282,7 @@ export const SearchProvider = ({ children }) => {
     highlightSearchResults(uniqueResults, highestFactorLiquid, highestFactorGaseous, highestFactorMineral);
     setSearchMaterial(matchingMaterialIds);
     return uniqueResults;
-  }, [planetData, materials, filters, resourceThreshold, isRelativeThreshold, resourceTypeFilter]);
+  }, [planetData, materials, filters, resourceThreshold, isRelativeThreshold, resourceTypeFilter, maxFactorPerMaterial]);
 
   const handleCompanySearch = useCallback(async (companyCode) => {
     const sanitizedCompanyCode = sanitizeInput(companyCode);
