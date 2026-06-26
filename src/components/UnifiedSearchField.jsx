@@ -2,15 +2,18 @@ import React, { useState, useContext, useEffect, useRef } from 'react';
 import { SearchContext } from '../contexts/SearchContext';
 
 const UnifiedSearchField = () => {
-  // EXCESSIVE COMMENTING: These states handle the input text, the list of matching suggestions, visibility toggles, and any required disambiguation.
-  const [inputValue, setInputValue] = useState('');
+  // EXCESSIVE COMMENTING: We alias the globally managed `unifiedSearchTerm` to `inputValue` locally to preserve all the downstream component logic while allowing the Clear button in the Context to wipe the text.
+  const { 
+    unifiedSearchTerm: inputValue, 
+    setUnifiedSearchTerm: setInputValue, 
+    generateSuggestions, 
+    executeUnifiedSearch 
+  } = useContext(SearchContext);
+
   const [suggestions, setSuggestions] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [disambiguationOptions, setDisambiguationOptions] = useState([]);
   const [notification, setNotification] = useState('');
-  
-  // Expose contexts to drive the underlying logic
-  const { generateSuggestions, executeUnifiedSearch } = useContext(SearchContext);
   
   // Ref to detect clicks outside the dropdown wrapper to close it automatically
   const wrapperRef = useRef(null);
@@ -61,7 +64,11 @@ const UnifiedSearchField = () => {
     e.preventDefault();
     if (disambiguationOptions.length > 0) return; // Prevent submission if disambiguation modal is active
 
-    if (!inputValue.trim()) return;
+    // EXCESSIVE COMMENTING: If the input is completely empty and the user hits enter, execute a wild card search (General category, empty text) to show everything matching the filters.
+    if (!inputValue.trim()) {
+      await executeUnifiedSearch({ text: '', category: 'General' });
+      return;
+    }
 
     let parsedText = inputValue;
     let parsedCategory = null;
@@ -90,7 +97,7 @@ const UnifiedSearchField = () => {
 
     // EXCESSIVE COMMENTING: If multiple EXACT matches exist across different categories, we evaluate conflict resolution.
     if (exactMatches.length > 1) {
-      // EXCESSIVE COMMENTING: Due to FIO Corporation names frequently colliding with base game Resource tickers (e.g., 'AL', 'FE'), and Resources being vastly more commonly searched by users, we implement a priority bypass. If a 'Resource' category is present amongst the exact matches, we automatically assume the user meant the Resource and silently bypass the disambiguation modal, executing the selection immediately.
+      // EXCESSIVE COMMENTING: Due to FIO Corporation names frequently colliding with base game Resource tickers (e.g., 'AL', 'FE'), and Resources being vastly more commonly searched by users, we implement a priority bypass.
       const resourceMatch = exactMatches.find(match => match.category === 'Resource');
       
       if (resourceMatch) {
