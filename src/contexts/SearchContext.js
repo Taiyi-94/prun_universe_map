@@ -26,15 +26,21 @@ export const SearchProvider = ({ children }) => {
   const [searchMaterialConcentrationLiquid, setSearchMaterialConcentrationLiquid] = useState([]);
   const [searchMaterialConcentrationGaseous, setSearchMaterialConcentrationGaseous] = useState([]);
   const [searchMaterialConcentrationMineral, setSearchMaterialConcentrationMineral] = useState([]);
+  
+  // EXCESSIVE COMMENTING: Added `requireAvailablePlots` defaulting to false, preserving base UX.
   const [filters, setFilters] = useState({
     planetType: ['Rocky', 'Gaseous'],
     gravity: ['Low', 'High'],
     temperature: ['Low', 'High'],
     pressure: ['Low', 'High'],
     cogcProgram: [],
-    minStars: 0
+    minStars: 0,
+    requireAvailablePlots: false
   });
   
+  // EXCESSIVE COMMENTING: State block explicitly for capturing the JSON dump from the new Python script.
+  const [plotsData, setPlotsData] = useState({});
+
   const [unifiedSearchTerm, setUnifiedSearchTerm] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const lastQueryRef = useRef({ text: '', category: 'General' });
@@ -46,6 +52,17 @@ export const SearchProvider = ({ children }) => {
   const [resourceTypeFilter, setResourceTypeFilter] = useState('ALL');
   const [companySearchTerm, setCompanySearchTerm] = useState('');
   const [isCompanySearch, setIsCompanySearch] = useState(false);
+
+  // EXCESSIVE COMMENTING: Load the secondary dataset. If it fails (because the script hasn't been run or written yet), we silently swallow the error so it doesn't break the application.
+  useEffect(() => {
+    fetch(`${process.env.PUBLIC_URL}/plots_data.json`)
+      .then(response => {
+        if (!response.ok) throw new Error("plots_data.json not found");
+        return response.json();
+      })
+      .then(data => setPlotsData(data))
+      .catch(error => console.log('Plots filter inactive: ', error.message));
+  }, []);
 
   const maxFactorPerMaterial = useMemo(() => {
     const maxPerResource = {};
@@ -146,12 +163,16 @@ export const SearchProvider = ({ children }) => {
 
       const tierCondition = determinePlanetTier(planet.BuildRequirements) >= (filters.minStars || 0);
 
+      // EXCESSIVE COMMENTING: Safely evaluate if the plot filter is active. If the data map lacks the planet entirely, we assume 0 to forcefully exclude it.
+      const plotsCondition = !filters.requireAvailablePlots || 
+                             (plotsData[planet.PlanetNaturalId] !== undefined && plotsData[planet.PlanetNaturalId] > 0);
+
       return planetTypeCondition && planetFertility && gravityCondition && temperatureCondition &&
-             pressureCondition && cogcCondition && tierCondition;
+             pressureCondition && cogcCondition && tierCondition && plotsCondition;
     });
 
     return Array.from(new Set(filtered.map(JSON.stringify))).map(JSON.parse);
-  }, [planetData, filters, resourceThreshold, isRelativeThreshold, resourceTypeFilter, maxFactorPerMaterial]);
+  }, [planetData, filters, resourceThreshold, isRelativeThreshold, resourceTypeFilter, maxFactorPerMaterial, plotsData]); // Added plotsData dependency
 
 
   const finalizeAndHighlight = useCallback((uniqueResults, matchingMaterialIds = []) => {
@@ -361,22 +382,18 @@ export const SearchProvider = ({ children }) => {
         } catch (error) {}
     }
 
-    // EXCESSIVE COMMENTING: Advanced dropdown sorting protocol.
     suggestions.sort((a, b) => {
         const aIsCorp = a.category === 'Corporation';
         const bIsCorp = b.category === 'Corporation';
 
-        // Rule 1: Corporations unconditionally drop to the absolute bottom of the dropdown list.
         if (!aIsCorp && bIsCorp) return -1;
         if (aIsCorp && !bIsCorp) return 1;
 
-        // Rule 2: Exact string matches heavily outweigh partial string matches.
         const aExact = a.text.toLowerCase() === lowerTerm;
         const bExact = b.text.toLowerCase() === lowerTerm;
         if (aExact && !bExact) return -1;
         if (!aExact && bExact) return 1;
         
-        // Rule 3: For identical match-types, prefer shorter strings (cleaner matches).
         return a.text.length - b.text.length;
     });
 

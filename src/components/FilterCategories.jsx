@@ -91,7 +91,6 @@ const CogcFilter = ({ active, program, onToggle, onProgramChange }) => {
   );
 };
 
-// EXCESSIVE COMMENTING: Recreated the scattered mapping overlay buttons inside a unified container to render cleanly on the Advanced Options line. 
 const MapModesFilter = () => {
   const { isPathfindingEnabled, togglePathfinding } = useContext(SelectionContext);
   const { isOverlayVisible, toggleOverlayVisibility } = useDataPoints();
@@ -172,12 +171,20 @@ export const BasicFilters = () => {
       <div className="filter-category">
         <h4>Features</h4>
         <div className="toggle-group">
+          {/* EXCESSIVE COMMENTING: Formatted Fertile and the new Plots Avail buttons to snap together via token1/token2 classes. */}
           <ToggleToken
             label="Fertile"
             active={filters.planetType.includes('Fertile')}
             onClick={() => handleChange('planetType', 'Fertile')}
             tooltip="Fertile Planets"
-            className="toggle-token"
+            className="toggle-token1"
+          />
+          <ToggleToken
+            label="Plots Avail"
+            active={filters.requireAvailablePlots}
+            onClick={() => updateFilters({ ...filters, requireAvailablePlots: !filters.requireAvailablePlots })}
+            tooltip="Planets with > 0 Available Plots"
+            className="toggle-token2"
           />
         </div>
       </div>
