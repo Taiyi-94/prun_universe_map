@@ -5,7 +5,6 @@ import InfoTooltip from './InfoTooltip';
 import { SearchContext } from '../contexts/SearchContext';
 
 const StandardControls = () => {
-  // EXCESSIVE COMMENTING: `showAdvanced` is pulled globally from SearchContext instead of local state. This ensures that unmounting the controls during Gateway Mode transitions doesn't destroy the menu state.
   const { clearSearch, showAdvanced, setShowAdvanced } = useContext(SearchContext);
 
   return (
@@ -13,7 +12,6 @@ const StandardControls = () => {
       
       <div className="std-top-row" style={{ display: 'flex', width: '100%', alignItems: 'flex-end', justifyContent: 'flex-start', flexWrap: 'wrap', gap: '5px' }}>
         
-        {/* Left Side: Buttons & Filters */}
         <div className="std-left-group" style={{ display: 'flex', alignItems: 'flex-end', flexWrap: 'wrap', gap: '10px' }}>
           <button
             className="filter-toggle"
@@ -25,12 +23,12 @@ const StandardControls = () => {
           <BasicFilters />
         </div>
 
-        {/* EXCESSIVE COMMENTING: Added explicit `flexDirection: 'row'` here. A legacy CSS rule inside App.css for `.std-right-group` was forcing this entire block to render as a vertical column. This completely breaks the stacking loop. */}
         <div className="std-right-group" style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-end', flexWrap: 'wrap', gap: '8px', marginBottom: '2px', marginLeft: '10px' }}>
           <UnifiedSearchField />
           <button className="clear-button" style={{ margin: 0, padding: '5px 10px' }} onClick={clearSearch}>Clear</button>
           
-          <div style={{ display: 'flex', alignItems: 'center', paddingBottom: '3px' }}>
+          {/* EXCESSIVE COMMENTING: Stripped out the 3px padding-bottom that was artificially hoisting the SVG icon out of horizontal alignment with the Search and Clear buttons, assigning a subtle 1px margin-bottom instead to rest the graphic geometrically flush on the UI baseline. */}
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '1px' }}>
              <InfoTooltip />
           </div>
         </div>

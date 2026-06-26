@@ -36,10 +36,7 @@ export const SearchProvider = ({ children }) => {
   });
   
   const [unifiedSearchTerm, setUnifiedSearchTerm] = useState('');
-  
-  // EXCESSIVE COMMENTING: Lifted the Advanced Menu toggle state into global context. This ensures that when StandardControls is unmounted (e.g., entering Gateway Mode), it remembers it was left open upon returning!
   const [showAdvanced, setShowAdvanced] = useState(false);
-  
   const lastQueryRef = useRef({ text: '', category: 'General' });
 
   const [systemSearchTerm, setSystemSearchTerm] = useState('');
@@ -316,40 +313,6 @@ export const SearchProvider = ({ children }) => {
     }
   }, [planetData]);
 
-  const clearSearch = useCallback(() => {
-    setSearchResults([]);
-    setUnifiedSearchTerm('');
-    lastQueryRef.current = { text: '', category: 'General' };
-    setSystemSearchTerm('');
-    setMaterialSearchTerm('');
-    setCompanySearchTerm('');
-    setSearchMaterial([]);
-    setSearchMaterialConcentrationLiquid([]);
-    setSearchMaterialConcentrationGaseous([]);
-    setSearchMaterialConcentrationMineral([]);
-    clearHighlights();
-  }, []);
-
-  const updateFilters = useCallback((newFilters) => {
-    setFilters(newFilters);
-  }, []);
-
-  const updateSystemSearchTerm = useCallback((term) => {
-    setSystemSearchTerm(term);
-  }, []);
-
-  const updateMaterialSearchTerm = useCallback((term) => {
-    setMaterialSearchTerm(term);
-  }, []);
-
-  const updateCompanySearchTerm = useCallback((term) => {
-    setCompanySearchTerm(term);
-  }, []);
-
-  const toggleCompanySearch = useCallback(() => {
-    setIsCompanySearch(prev => !prev);
-    clearSearch();
-  }, [clearSearch]);
 
   const generateSuggestions = useCallback((term) => {
     if (!term || term.trim().length === 0) return [];
@@ -407,6 +370,7 @@ export const SearchProvider = ({ children }) => {
     return unique;
   }, [materials, universeData, planetData]);
 
+
   const executeUnifiedSearch = useCallback(async (option) => {
     lastQueryRef.current = option;
     clearHighlights();
@@ -427,6 +391,43 @@ export const SearchProvider = ({ children }) => {
     }
     return results;
   }, [handleCompanySearch, handleMaterialSearch, handleSystemSearch]);
+
+
+  // EXCESSIVE COMMENTING: Relocated `clearSearch` BELOW `executeUnifiedSearch` to bypass react hook hoisting issues. Now, `clearSearch` zeroes out text states but instead of forcing a blank map, it forces a blank wildcard search! This flawlessly retains the boundary of currently active user filters!
+  const clearSearch = useCallback(() => {
+    setUnifiedSearchTerm('');
+    setSystemSearchTerm('');
+    setMaterialSearchTerm('');
+    setCompanySearchTerm('');
+    setSearchMaterial([]);
+    setSearchMaterialConcentrationLiquid([]);
+    setSearchMaterialConcentrationGaseous([]);
+    setSearchMaterialConcentrationMineral([]);
+    
+    executeUnifiedSearch({ text: '', category: 'General' });
+  }, [executeUnifiedSearch]);
+
+  const updateFilters = useCallback((newFilters) => {
+    setFilters(newFilters);
+  }, []);
+
+  const updateSystemSearchTerm = useCallback((term) => {
+    setSystemSearchTerm(term);
+  }, []);
+
+  const updateMaterialSearchTerm = useCallback((term) => {
+    setMaterialSearchTerm(term);
+  }, []);
+
+  const updateCompanySearchTerm = useCallback((term) => {
+    setCompanySearchTerm(term);
+  }, []);
+
+  const toggleCompanySearch = useCallback(() => {
+    setIsCompanySearch(prev => !prev);
+    clearSearch();
+  }, [clearSearch]);
+
 
   useEffect(() => {
     if (planetData && Object.keys(planetData).length > 0) {
@@ -457,7 +458,7 @@ export const SearchProvider = ({ children }) => {
         companySearchTerm,
         unifiedSearchTerm,          
         setUnifiedSearchTerm,
-        showAdvanced,                // EXPOSED: Extracted to allow layout state to persist
+        showAdvanced,                
         setShowAdvanced,
         updateSystemSearchTerm,
         updateMaterialSearchTerm,

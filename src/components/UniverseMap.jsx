@@ -6,12 +6,13 @@ import { GraphContext } from '../contexts/GraphContext';
 import { SelectionContext } from '../contexts/SelectionContext';
 import { useCogcOverlay } from '../contexts/CogcOverlayContext';
 import { useMapMode, MAP_MODES, GATEWAY_STRATEGIES } from '../contexts/MapModeContext';
-import { addMouseEvents, drawGatewayHover } from '../utils/svgUtils'; // Import helper
+import { addMouseEvents, drawGatewayHover } from '../utils/svgUtils'; 
 import { resetGraphState, renderGatewayVisuals } from '../utils/graphUtils';
 import { calculate3DDistance } from '../utils/distanceUtils';
 import { cogcPrograms } from '../constants/cogcPrograms';
-import './UniverseMap.css';
 import { SearchContext } from '../contexts/SearchContext';
+import './UniverseMap.css';
+
 
 const CX_SYSTEMS = [
   '8ecf9670ba070d78cfb5537e8d9f1b6c', // Antares
@@ -26,7 +27,9 @@ const UniverseMap = React.memo(() => {
   const { graph, planetData, materials, universeData } = useContext(GraphContext);
   const { highlightSelectedSystem } = useContext(SelectionContext);
   const { overlayProgram } = useCogcOverlay();
-  const { searchResults, isRelativeThreshold } = useContext(SearchContext);
+  
+  // EXCESSIVE COMMENTING: Inject `filters` array to determine if the CoGC logical toggle is actively narrowing the dataset.
+  const { searchResults, isRelativeThreshold, filters } = useContext(SearchContext);
   
   const { activeMode, gatewayData, setOriginById, addPlannedGateway, resetSelection, hoveredSystemId, getFtlDistance } = useMapMode();
 
@@ -78,7 +81,6 @@ const UniverseMap = React.memo(() => {
                 }
             } else {
                 resetSelection(); 
-                // setOriginById(systemId, 'A'); 
             }
         }
     }
@@ -184,10 +186,20 @@ const UniverseMap = React.memo(() => {
       }
   }, [hoveredSystemId, activeMode, gatewayData, universeData]);
 
+  // EXCESSIVE COMMENTING: Extracted boolean to explicitly verify if the logic-filter array contains restrictive bounds.
+  const isCogcFilterActive = filters && filters.cogcProgram && filters.cogcProgram.length > 0;
+
   const applyCogcOverlay = useCallback(() => {
-    if (!graphRef.current || !overlayProgram) return;
+    if (!graphRef.current) return;
     const { g } = graphRef.current;
+    
     g.selectAll('.cogc-overlay-rect').remove();
+
+    // EXCESSIVE COMMENTING: Exclusivity trap. If the visual dropdown is completely clear OR the restrictive search toggle is actively running logic filtering, bypass the SVG styling entirely to prevent double-saturation visual noise!
+    if (!overlayProgram || isCogcFilterActive) {
+      g.selectAll('rect').classed('cogc-overlay', false).property('cogcOverlayRect', null);
+      return;
+    }
 
     g.selectAll('rect').each(function() {
       const rect = d3.select(this);
@@ -226,7 +238,7 @@ const UniverseMap = React.memo(() => {
         rect.property('cogcOverlayRect', null);
       }
     });
-  }, [overlayProgram, planetData, selectedProgramValue]);
+  }, [overlayProgram, planetData, selectedProgramValue, isCogcFilterActive]); // EXCESSIVE COMMENTING: Bound the exclusivity boolean into the dependency array.
 
   useEffect(() => {
     applyCogcOverlay();
