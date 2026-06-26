@@ -171,7 +171,6 @@ export const BasicFilters = () => {
       <div className="filter-category">
         <h4>Features</h4>
         <div className="toggle-group">
-          {/* EXCESSIVE COMMENTING: Formatted Fertile and the new Plots Avail buttons to snap together via token1/token2 classes. */}
           <ToggleToken
             label="Fertile"
             active={filters.planetType.includes('Fertile')}
@@ -179,11 +178,12 @@ export const BasicFilters = () => {
             tooltip="Fertile Planets"
             className="toggle-token1"
           />
+          {/* EXCESSIVE COMMENTING: Pivot adjustment. Swapped token labeling to "Uncongested" to accurately denote density profiling over hard binary capacity slots. */}
           <ToggleToken
-            label="Plots Avail"
-            active={filters.requireAvailablePlots}
-            onClick={() => updateFilters({ ...filters, requireAvailablePlots: !filters.requireAvailablePlots })}
-            tooltip="Planets with > 0 Available Plots"
+            label="Uncongested"
+            active={filters.hideCongested}
+            onClick={() => updateFilters({ ...filters, hideCongested: !filters.hideCongested })}
+            tooltip="Filter out overbuilt planets (Heuristic: Less than 400 total active FIO sites)"
             className="toggle-token2"
           />
         </div>

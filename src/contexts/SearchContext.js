@@ -27,7 +27,7 @@ export const SearchProvider = ({ children }) => {
   const [searchMaterialConcentrationGaseous, setSearchMaterialConcentrationGaseous] = useState([]);
   const [searchMaterialConcentrationMineral, setSearchMaterialConcentrationMineral] = useState([]);
   
-  // EXCESSIVE COMMENTING: Added `requireAvailablePlots` defaulting to false, preserving base UX.
+  // EXCESSIVE COMMENTING: Migrated state parameter name from the obsolete binary variable to `hideCongested` to support the updated density heuristic.
   const [filters, setFilters] = useState({
     planetType: ['Rocky', 'Gaseous'],
     gravity: ['Low', 'High'],
@@ -35,12 +35,10 @@ export const SearchProvider = ({ children }) => {
     pressure: ['Low', 'High'],
     cogcProgram: [],
     minStars: 0,
-    requireAvailablePlots: false
+    hideCongested: false
   });
   
-  // EXCESSIVE COMMENTING: State block explicitly for capturing the JSON dump from the new Python script.
   const [plotsData, setPlotsData] = useState({});
-
   const [unifiedSearchTerm, setUnifiedSearchTerm] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const lastQueryRef = useRef({ text: '', category: 'General' });
@@ -53,15 +51,15 @@ export const SearchProvider = ({ children }) => {
   const [companySearchTerm, setCompanySearchTerm] = useState('');
   const [isCompanySearch, setIsCompanySearch] = useState(false);
 
-  // EXCESSIVE COMMENTING: Load the secondary dataset. If it fails (because the script hasn't been run or written yet), we silently swallow the error so it doesn't break the application.
+  // EXCESSIVE COMMENTING: Ingest the generated cache file built by our automated python loop script.
   useEffect(() => {
     fetch(`${process.env.PUBLIC_URL}/plots_data.json`)
       .then(response => {
-        if (!response.ok) throw new Error("plots_data.json not found");
+        if (!response.ok) throw new Error("plots_data.json cache missing");
         return response.json();
       })
       .then(data => setPlotsData(data))
-      .catch(error => console.log('Plots filter inactive: ', error.message));
+      .catch(error => console.log('Congestion metrics inactive: ', error.message));
   }, []);
 
   const maxFactorPerMaterial = useMemo(() => {
@@ -163,16 +161,16 @@ export const SearchProvider = ({ children }) => {
 
       const tierCondition = determinePlanetTier(planet.BuildRequirements) >= (filters.minStars || 0);
 
-      // EXCESSIVE COMMENTING: Safely evaluate if the plot filter is active. If the data map lacks the planet entirely, we assume 0 to forcefully exclude it.
-      const plotsCondition = !filters.requireAvailablePlots || 
-                             (plotsData[planet.PlanetNaturalId] !== undefined && plotsData[planet.PlanetNaturalId] > 0);
+      # EXCESSIVE COMMENTING: Density Ceiling Heuristic Loop. If the user flips on the "Uncongested" toggle filter button, we pull the mapped raw site count integer out of `plotsData`. If that count exceeds a flat 400 ceiling limit, we assume the world is locked down and flag it as false to exclude it. Unrecorded/Fresh worlds default to 0 (Uncongested) so they pass safely.
+      const plotsCondition = !filters.hideCongested || 
+                             (plotsData[planet.PlanetNaturalId] === undefined || plotsData[planet.PlanetNaturalId] <= 400);
 
       return planetTypeCondition && planetFertility && gravityCondition && temperatureCondition &&
              pressureCondition && cogcCondition && tierCondition && plotsCondition;
     });
 
     return Array.from(new Set(filtered.map(JSON.stringify))).map(JSON.parse);
-  }, [planetData, filters, resourceThreshold, isRelativeThreshold, resourceTypeFilter, maxFactorPerMaterial, plotsData]); // Added plotsData dependency
+  }, [planetData, filters, resourceThreshold, isRelativeThreshold, resourceTypeFilter, maxFactorPerMaterial, plotsData]);
 
 
   const finalizeAndHighlight = useCallback((uniqueResults, matchingMaterialIds = []) => {
