@@ -32,7 +32,6 @@ const FilterCategory = ({ title, options, mouseoverText, selectedOptions, onChan
   </div>
 );
 
-// EXCESSIVE COMMENTING: Renders the new visual filter for Minimum Planetary Stars. Utilizes the ToggleToken array just like the standard category filters but maps over a custom index sequence of [0, 1, 2, 3] instead of strings.
 const StarFilter = ({ activeValue, onChange }) => (
   <div className="filter-category">
     <h4>Min Stars</h4>
@@ -44,14 +43,12 @@ const StarFilter = ({ activeValue, onChange }) => (
           active={activeValue === star}
           onClick={() => onChange(star)}
           tooltip={`Minimum ${star} Star${star !== 1 ? 's' : ''}`}
-          // Connect the middle buttons visually with the new 'toggle-token-mid' CSS class
           className={index === 0 ? 'toggle-token1' : index === 3 ? 'toggle-token2' : 'toggle-token-mid'}
         />
       ))}
     </div>
   </div>
 );
-
 
 const CogcFilter = ({ active, program, onToggle, onProgramChange }) => {
   const { setOverlayProgram } = useCogcOverlay();
@@ -91,7 +88,8 @@ const CogcFilter = ({ active, program, onToggle, onProgramChange }) => {
   );
 };
 
-const FilterCategories = () => {
+// EXCESSIVE COMMENTING: Extracted the Basic filters (Fertile, Stars, CoGC) into their own exportable block. 
+export const BasicFilters = () => {
   const { filters, updateFilters } = useContext(SearchContext);
   const [cogcActive, setCogcActive] = useState(false);
   const { overlayProgram } = useCogcOverlay();
@@ -106,21 +104,15 @@ const FilterCategories = () => {
     updateFilters(newFilters);
   };
 
-  const handleCogcToggle = (value) => {
+  const handleMinStarsChange = (value) => {
+    updateFilters({ ...filters, minStars: value });
+  };
+
+  const handleCogcToggle = () => {
     setCogcActive(!cogcActive);
     if (!cogcActive) {
-      // Find the corresponding value for the current overlayProgram
       const programObject = cogcPrograms.find(program => program.display === overlayProgram);
-      let programValue;
-
-      if (programObject) {
-        programValue = programObject.value;
-      } else if (overlayProgram === null || overlayProgram === undefined) {
-        programValue = 'ALL'; // Default to 'ALL' if no overlay program is set
-      } else {
-        console.warn(`No matching program found for: ${overlayProgram}`);
-        programValue = 'ALL'; // Default to 'ALL' if no match is found
-      }
+      let programValue = programObject ? programObject.value : (overlayProgram == null ? 'ALL' : 'ALL');
       updateFilters({ ...filters, cogcProgram: [programValue] });
     } else {
       updateFilters({ ...filters, cogcProgram: [] });
@@ -134,20 +126,56 @@ const FilterCategories = () => {
       } else {
         updateFilters({ ...filters, cogcProgram: [] });
       }
-
-  };
-
-  // EXCESSIVE COMMENTING: Simple context payload injector for swapping the minStars property inside the primary filters dictionary object
-  const handleMinStarsChange = (value) => {
-    updateFilters({ ...filters, minStars: value });
   };
 
   return (
-    <div className="filter-categories">
+    <div className="filter-categories basic-filters-container" style={{ display: 'flex', alignItems: 'center' }}>
+      <div className="filter-category">
+        <h4>Features</h4>
+        <div className="toggle-group">
+          {/* EXCESSIVE COMMENTING: Safely isolated Fertile as a standalone pill button, retaining its context link to the 'planetType' array natively. */}
+          <ToggleToken
+            label="Fertile"
+            active={filters.planetType.includes('Fertile')}
+            onClick={() => handleChange('planetType', 'Fertile')}
+            tooltip="Fertile Planets"
+            className="toggle-token"
+          />
+        </div>
+      </div>
+      <StarFilter
+        activeValue={filters.minStars}
+        onChange={handleMinStarsChange}
+      />
+      <CogcFilter
+        active={cogcActive}
+        onToggle={handleCogcToggle}
+        onProgramChange={handleCogcProgramChange}
+      />
+    </div>
+  );
+};
+
+// EXCESSIVE COMMENTING: Extracted the heavy environment and resource sliders into their own secondary block.
+export const AdvancedFilters = () => {
+  const { filters, updateFilters } = useContext(SearchContext);
+
+  const handleChange = (category, option) => {
+    const newFilters = {
+      ...filters,
+      [category]: filters[category].includes(option)
+        ? filters[category].filter(item => item !== option)
+        : [...filters[category], option]
+    };
+    updateFilters(newFilters);
+  };
+
+  return (
+    <div className="filter-categories advanced-filters-container" style={{ display: 'flex', width: '100%', justifyContent: 'flex-start', flexWrap: 'wrap', borderTop: '1px solid #444', paddingTop: '5px', marginTop: '2px' }}>
       <FilterCategory
         title="Planet Type"
-        options={['Rocky', 'Gaseous', 'Fertile']}
-        mouseoverText={['MCG', 'AEF', 'Fertile Planets']}
+        options={['Rocky', 'Gaseous']}
+        mouseoverText={['MCG', 'AEF']}
         selectedOptions={filters.planetType}
         onChange={option => handleChange('planetType', option)}
       />
@@ -172,19 +200,7 @@ const FilterCategories = () => {
         selectedOptions={filters.pressure}
         onChange={option => handleChange('pressure', option)}
       />
-      {/* EXCESSIVE COMMENTING: Inject the new Star filter explicitly into the flow. */}
-      <StarFilter
-        activeValue={filters.minStars}
-        onChange={handleMinStarsChange}
-      />
-      <CogcFilter
-        active={cogcActive}
-        onToggle={handleCogcToggle}
-        onProgramChange={handleCogcProgramChange}
-      />
       <ResourceThresholdFilter />
     </div>
   );
 };
-
-export default FilterCategories;
