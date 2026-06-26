@@ -312,13 +312,11 @@ export const SearchProvider = ({ children }) => {
   }, [planetData]);
 
 
-  // EXCESSIVE COMMENTING: Converted generateSuggestions to an async function. It now performs a rapid internal lookup, then executes a live fetch against the FIO API natively before releasing the suggestions array to the UI dropdown.
   const generateSuggestions = useCallback(async (term) => {
     if (!term || term.trim().length === 0) return [];
     const lowerTerm = term.toLowerCase().trim();
     const suggestions = [];
 
-    // Local Data Scans
     if (materials) {
         materials.forEach(m => {
             if (m.Ticker.toLowerCase().includes(lowerTerm) || m.Name.toLowerCase().includes(lowerTerm)) {
@@ -346,7 +344,6 @@ export const SearchProvider = ({ children }) => {
         });
     }
 
-    // EXCESSIVE COMMENTING: Live FIO API validation sequence. Only ping the endpoint if the typed length is short enough to plausibly be a company code (to save network traffic). If the API yields a response containing verified map bases, we append it directly as a real 'Corporation' option.
     const sanitizedForFio = sanitizeInput(term);
     if (sanitizedForFio.length > 0 && sanitizedForFio.length <= 8) {
         try {
@@ -361,16 +358,25 @@ export const SearchProvider = ({ children }) => {
                     });
                 }
             }
-        } catch (error) {
-            // Silently swallow fetch timeouts or 404s so the primary autocomplete thread isn't disrupted
-        }
+        } catch (error) {}
     }
 
+    // EXCESSIVE COMMENTING: Advanced dropdown sorting protocol.
     suggestions.sort((a, b) => {
+        const aIsCorp = a.category === 'Corporation';
+        const bIsCorp = b.category === 'Corporation';
+
+        // Rule 1: Corporations unconditionally drop to the absolute bottom of the dropdown list.
+        if (!aIsCorp && bIsCorp) return -1;
+        if (aIsCorp && !bIsCorp) return 1;
+
+        // Rule 2: Exact string matches heavily outweigh partial string matches.
         const aExact = a.text.toLowerCase() === lowerTerm;
         const bExact = b.text.toLowerCase() === lowerTerm;
         if (aExact && !bExact) return -1;
         if (!aExact && bExact) return 1;
+        
+        // Rule 3: For identical match-types, prefer shorter strings (cleaner matches).
         return a.text.length - b.text.length;
     });
 

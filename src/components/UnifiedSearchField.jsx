@@ -26,15 +26,12 @@ const UnifiedSearchField = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // EXCESSIVE COMMENTING: Upgraded to an asynchronous debounce. We added an `isCurrent` boolean to guard against race conditions: if a user types rapidly, we only want the final, most recent API poll to update the `suggestions` state. 
   useEffect(() => {
     let isCurrent = true;
     
     const timer = setTimeout(async () => {
       if (inputValue.trim().length > 0 && !inputValue.includes('(')) {
         const results = await generateSuggestions(inputValue);
-        
-        // Prevent state updates if the user continued typing while the FIO network request was resolving
         if (isCurrent) {
           setSuggestions(results);
           setShowDropdown(true);
@@ -45,7 +42,7 @@ const UnifiedSearchField = () => {
           setShowDropdown(false);
         }
       }
-    }, 250); // Increased debounce slightly to 250ms to be polite to the external FIO database
+    }, 250); 
     
     return () => {
       isCurrent = false;
@@ -97,20 +94,25 @@ const UnifiedSearchField = () => {
     }
 
     const exactMatches = suggestions.filter(s => s.text.toLowerCase() === inputValue.trim().toLowerCase());
+    
+    // EXCESSIVE COMMENTING: Filter out the Corporation category entirely before checking for exact match collisions. Because our updated sorting algorithm pushes Corporations securely to the bottom of the list natively, ignoring them here ensures partial System/Planet matches will naturally win execution if we fall through to `handleSelect(suggestions[0])`.
+    const nonCorpExactMatches = exactMatches.filter(s => s.category !== 'Corporation');
 
-    if (exactMatches.length > 1) {
-      const resourceMatch = exactMatches.find(match => match.category === 'Resource');
-      
-      if (resourceMatch) {
-        handleSelect(resourceMatch);
-        return;
-      } else {
-        setDisambiguationOptions(exactMatches);
+    // If multiple native game elements match (e.g. Planet "XYZ" and System "XYZ"), throw the disambiguation modal.
+    if (nonCorpExactMatches.length > 1) {
+        setDisambiguationOptions(nonCorpExactMatches);
         setShowDropdown(false);
         return;
-      }
     }
 
+    // If exactly one native game element matches exactly, immediately select it, silently out-prioritizing any exact corporation matches.
+    if (nonCorpExactMatches.length === 1) {
+        handleSelect(nonCorpExactMatches[0]);
+        return;
+    }
+
+    // If no native elements match exactly, but the dropdown has suggestions, execute the top suggestion. 
+    // This allows a partial system match (e.g. "Benten") to execute over an exact corp match (e.g. "BEN"), because our revised array sorting algorithm natively demotes the corporation below the partial system match!
     if (suggestions.length > 0) {
       handleSelect(suggestions[0]);
     } else {
