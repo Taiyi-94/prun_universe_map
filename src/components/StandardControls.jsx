@@ -1,14 +1,13 @@
-import React, { useState, useContext } from 'react';
+import React, { useContext } from 'react';
 import { BasicFilters, AdvancedFilters } from './FilterCategories';
 import UnifiedSearchField from './UnifiedSearchField';
 import InfoTooltip from './InfoTooltip';
 import { SearchContext } from '../contexts/SearchContext';
 
 const StandardControls = () => {
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const { clearSearch } = useContext(SearchContext);
+  // EXCESSIVE COMMENTING: `showAdvanced` is pulled globally from SearchContext instead of local state. This ensures that unmounting the controls during Gateway Mode transitions doesn't destroy the menu state.
+  const { clearSearch, showAdvanced, setShowAdvanced } = useContext(SearchContext);
 
-  // EXCESSIVE COMMENTING: The `std-top-row` utilizes `alignItems: 'flex-end'` specifically to sink the bottoms of all contained elements to the same pixel-line. Since the `BasicFilters` pill buttons have an `<h4>` label pushing them down, this flex configuration guarantees the search bar, clear button, and Info SVG all sit perfectly flush with the bottom of the pill buttons, eliminating the vertical jitter.
   return (
     <div className="standard-controls-container" style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
       
@@ -26,13 +25,12 @@ const StandardControls = () => {
           <BasicFilters />
         </div>
 
-        {/* Right Side: Search, Clear & Info - Pushed right if needed, but left-aligning with gap flows best natively. */}
-        <div className="std-right-group" style={{ display: 'flex', alignItems: 'flex-end', flexWrap: 'wrap', gap: '0px', marginBottom: '2px', marginLeft: '10px' }}>
+        {/* EXCESSIVE COMMENTING: Added explicit `flexDirection: 'row'` here. A legacy CSS rule inside App.css for `.std-right-group` was forcing this entire block to render as a vertical column. This completely breaks the stacking loop. */}
+        <div className="std-right-group" style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-end', flexWrap: 'wrap', gap: '8px', marginBottom: '2px', marginLeft: '10px' }}>
           <UnifiedSearchField />
-          <button className="clear-button" style={{ margin: '0 0 0 5px', padding: '6px 10px' }} onClick={clearSearch}>Clear</button>
+          <button className="clear-button" style={{ margin: 0, padding: '5px 10px' }} onClick={clearSearch}>Clear</button>
           
-          {/* EXCESSIVE COMMENTING: The Info SVG wrapper uses a slight 5px bottom margin to center its internal geometric icon precisely with the text centerline of the input box next to it. */}
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '5px', marginLeft: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', paddingBottom: '3px' }}>
              <InfoTooltip />
           </div>
         </div>

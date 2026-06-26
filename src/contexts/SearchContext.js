@@ -35,10 +35,11 @@ export const SearchProvider = ({ children }) => {
     minStars: 0
   });
   
-  // EXCESSIVE COMMENTING: State lifted from UnifiedSearchField so that clearSearch() can manipulate it natively.
   const [unifiedSearchTerm, setUnifiedSearchTerm] = useState('');
   
-  // EXCESSIVE COMMENTING: A reference block holding the last query executed. This allows the useEffect filter-watcher to silently re-run the latest query whenever a user toggles a UI filter.
+  // EXCESSIVE COMMENTING: Lifted the Advanced Menu toggle state into global context. This ensures that when StandardControls is unmounted (e.g., entering Gateway Mode), it remembers it was left open upon returning!
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  
   const lastQueryRef = useRef({ text: '', category: 'General' });
 
   const [systemSearchTerm, setSystemSearchTerm] = useState('');
@@ -63,20 +64,16 @@ export const SearchProvider = ({ children }) => {
   }, [planetData]);
 
 
-  // EXCESSIVE COMMENTING: A master abstraction funnel. All search queries (System, Material) push raw results here. This guarantees 100% DRY consistency for environmental penalties, minimum stars, CoGCs, and thresholds.
   const applyFiltersToResults = useCallback((resultsToFilter) => {
     const filtered = resultsToFilter.filter(result => {
-      // Bailout: Do not filter FIO Corporation targets
       if (result.type === 'company_base') return true;
 
-      // Extract contextual IDs safely depending on if a System or Planet triggered the result
       const targetPlanetId = result.planetId || (result.type === 'planet' ? result.id : null);
-      if (!targetPlanetId && result.type === 'system') return true; // Keep naked systems
+      if (!targetPlanetId && result.type === 'system') return true; 
 
       const planet = planetData[result.systemId]?.find(p => p.PlanetNaturalId === targetPlanetId);
       if (!planet) return false;
 
-      // Apply resource specific thresholds
       if (result.type === 'material') {
         if (resourceTypeFilter !== 'ALL' && result.resourceType !== resourceTypeFilter) {
           return false;
@@ -102,7 +99,6 @@ export const SearchProvider = ({ children }) => {
         if (!factorCheck) return false;
 
       } else if (resourceThreshold > 0) {
-        // If searching a system/planet but the resource threshold > 0, filter planets lacking high-tier goods.
         let factorCheck;
         if (isRelativeThreshold) {
           factorCheck = planet.Resources.some(resource => {
@@ -115,7 +111,6 @@ export const SearchProvider = ({ children }) => {
         if (!factorCheck) return false;
       }
 
-      // Check strictly visual environment logic checks
       const planetTypeCondition =
         (filters.planetType.includes('Rocky') && planet.Surface) ||
         (filters.planetType.includes('Gaseous') && !planet.Surface);
@@ -159,12 +154,10 @@ export const SearchProvider = ({ children }) => {
              pressureCondition && cogcCondition && tierCondition;
     });
 
-    // Remove duplicates recursively by serializing to JSON and back
     return Array.from(new Set(filtered.map(JSON.stringify))).map(JSON.parse);
   }, [planetData, filters, resourceThreshold, isRelativeThreshold, resourceTypeFilter, maxFactorPerMaterial]);
 
 
-  // EXCESSIVE COMMENTING: A secondary helper abstraction that extracts the highest factor data universally for the SVG highlighter, before updating the overarching Application state.
   const finalizeAndHighlight = useCallback((uniqueResults, matchingMaterialIds = []) => {
     const highestFactorLiquid = uniqueResults
       .filter(r => r.resourceType === 'LIQUID')
@@ -193,7 +186,6 @@ export const SearchProvider = ({ children }) => {
     const results = [];
     const terms = sanitizedSearchTerm.split(/\s+/).filter(term => term.length >= 1); 
 
-    // EXCESSIVE COMMENTING: If the search text is totally empty, we execute a 'Wildcard Search'. This dumps every single planet and system into the raw results array before piping it through the standard filter abstraction. 
     if (terms.length === 0) {
       Object.entries(planetData).forEach(([systemId, planets]) => {
         planets.forEach(planet => {
@@ -204,7 +196,6 @@ export const SearchProvider = ({ children }) => {
       terms.forEach(term => {
         const lowerTerm = term.toLowerCase();
 
-        // Search in systems
         Object.entries(universeData).forEach(([systemId, systemArray]) => {
         let system = systemArray[0]
           if (system.Name.toLowerCase().includes(lowerTerm) ||
@@ -213,7 +204,6 @@ export const SearchProvider = ({ children }) => {
           }
         });
 
-        // Search in planets
         Object.entries(planetData).forEach(([systemId, planets]) => {
           planets.forEach(planet => {
             if (planet.PlanetName.toLowerCase().includes(lowerTerm) ||
@@ -326,8 +316,6 @@ export const SearchProvider = ({ children }) => {
     }
   }, [planetData]);
 
-
-  // EXCESSIVE COMMENTING: The unified clear function wipes all legacy states and zeroes out the global `unifiedSearchTerm`, natively emptying the visual DOM search box immediately.
   const clearSearch = useCallback(() => {
     setSearchResults([]);
     setUnifiedSearchTerm('');
@@ -419,8 +407,6 @@ export const SearchProvider = ({ children }) => {
     return unique;
   }, [materials, universeData, planetData]);
 
-
-  // EXCESSIVE COMMENTING: Notice that we deliberately dropped `clearSearch()` here. We manually wipe visual DOM highlights before recalculating results, maintaining the current unifiedSearchTerm safely.
   const executeUnifiedSearch = useCallback(async (option) => {
     lastQueryRef.current = option;
     clearHighlights();
@@ -442,8 +428,6 @@ export const SearchProvider = ({ children }) => {
     return results;
   }, [handleCompanySearch, handleMaterialSearch, handleSystemSearch]);
 
-
-  // EXCESSIVE COMMENTING: Auto-Execution Watcher. Anytime a visual UI filter changes its state value, this useEffect grabs the `lastQueryRef` and re-runs the logic asynchronously. This applies the filter visually in real-time.
   useEffect(() => {
     if (planetData && Object.keys(planetData).length > 0) {
       const timer = setTimeout(() => {
@@ -471,8 +455,10 @@ export const SearchProvider = ({ children }) => {
         systemSearchTerm,
         materialSearchTerm,
         companySearchTerm,
-        unifiedSearchTerm,           // EXPOSED: So UnifiedSearchField natively reflects state edits
+        unifiedSearchTerm,          
         setUnifiedSearchTerm,
+        showAdvanced,                // EXPOSED: Extracted to allow layout state to persist
+        setShowAdvanced,
         updateSystemSearchTerm,
         updateMaterialSearchTerm,
         updateCompanySearchTerm,
