@@ -165,7 +165,6 @@ const UnifiedSearchField = () => {
                   <span>{opt.text} <span style={{fontSize: '11px', color: '#aaa', marginLeft:'5px'}}>{opt.label && opt.label !== opt.text ? `(${opt.label})` : ''}</span></span>
                   <span className="cat-badge">{opt.category}</span>
                 </li>
-              </ul>
               ))}
             </ul>
             <button className="disambiguation-cancel" onClick={() => setDisambiguationOptions([])}>Cancel</button>
