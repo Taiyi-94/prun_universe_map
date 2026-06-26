@@ -32,6 +32,27 @@ const FilterCategory = ({ title, options, mouseoverText, selectedOptions, onChan
   </div>
 );
 
+// EXCESSIVE COMMENTING: Renders the new visual filter for Minimum Planetary Stars. Utilizes the ToggleToken array just like the standard category filters but maps over a custom index sequence of [0, 1, 2, 3] instead of strings.
+const StarFilter = ({ activeValue, onChange }) => (
+  <div className="filter-category">
+    <h4>Min Stars</h4>
+    <div className="toggle-group">
+      {[0, 1, 2, 3].map((star, index) => (
+        <ToggleToken
+          key={star}
+          label={`${star}★`}
+          active={activeValue === star}
+          onClick={() => onChange(star)}
+          tooltip={`Minimum ${star} Star${star !== 1 ? 's' : ''}`}
+          // Connect the middle buttons visually with the new 'toggle-token-mid' CSS class
+          className={index === 0 ? 'toggle-token1' : index === 3 ? 'toggle-token2' : 'toggle-token-mid'}
+        />
+      ))}
+    </div>
+  </div>
+);
+
+
 const CogcFilter = ({ active, program, onToggle, onProgramChange }) => {
   const { setOverlayProgram } = useCogcOverlay();
 
@@ -116,6 +137,11 @@ const FilterCategories = () => {
 
   };
 
+  // EXCESSIVE COMMENTING: Simple context payload injector for swapping the minStars property inside the primary filters dictionary object
+  const handleMinStarsChange = (value) => {
+    updateFilters({ ...filters, minStars: value });
+  };
+
   return (
     <div className="filter-categories">
       <FilterCategory
@@ -145,6 +171,11 @@ const FilterCategories = () => {
         mouseoverText={['SEA', 'HSE']}
         selectedOptions={filters.pressure}
         onChange={option => handleChange('pressure', option)}
+      />
+      {/* EXCESSIVE COMMENTING: Inject the new Star filter explicitly into the flow. */}
+      <StarFilter
+        activeValue={filters.minStars}
+        onChange={handleMinStarsChange}
       />
       <CogcFilter
         active={cogcActive}

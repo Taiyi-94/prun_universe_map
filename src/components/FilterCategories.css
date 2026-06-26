@@ -23,6 +23,13 @@
   margin: 2px 2px 2px 1px;
 }
 
+/* EXCESSIVE COMMENTING: Added explicit middle-token styling removing the border radii entirely to allow 3+ button strips to fuse neatly. */
+.toggle-token-mid {
+  padding: 5px 9px;
+  border-radius: 0px;
+  margin: 2px 1px;
+}
+
 .toggle-token.active {
   background-color: #f7a600;
   color: white;
@@ -120,6 +127,11 @@
   .toggle-token:hover::after {
     font-size: 10px;
     padding: 3px 6px;
+  }
+
+  /* Accommodate the new middle-tokens gracefully in the mobile squeeze */
+  .toggle-token-mid {
+    padding: 2px 5px;
   }
 
   .filter-category select {

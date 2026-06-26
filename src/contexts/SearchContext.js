@@ -2,6 +2,7 @@ import React, { createContext, useState, useCallback, useContext, useMemo } from
 import { GraphContext } from './GraphContext';
 import { phaseMultiplier } from '../constants/phaseMultiplier';
 import { highlightSearchResults, clearHighlights } from '../utils/searchUtils';
+import { determinePlanetTier } from '../utils/svgUtils'; // Import logic to calculate environmental star penalties
 
 
 export const SearchContext = createContext();
@@ -32,12 +33,14 @@ export const SearchProvider = ({ children }) => {
   const [searchMaterialConcentrationLiquid, setSearchMaterialConcentrationLiquid] = useState([]);
   const [searchMaterialConcentrationGaseous, setSearchMaterialConcentrationGaseous] = useState([]);
   const [searchMaterialConcentrationMineral, setSearchMaterialConcentrationMineral] = useState([]);
+  // EXCESSIVE COMMENTING: Extended the native filters object to include `minStars` defaulting to 0 so all planets show by default.
   const [filters, setFilters] = useState({
     planetType: ['Rocky', 'Gaseous'],
     gravity: ['Low', 'High'],
     temperature: ['Low', 'High'],
     pressure: ['Low', 'High'],
-    cogcProgram: []
+    cogcProgram: [],
+    minStars: 0
   });
   const [systemSearchTerm, setSystemSearchTerm] = useState('');
   const [materialSearchTerm, setMaterialSearchTerm] = useState('');
@@ -257,8 +260,11 @@ export const SearchProvider = ({ children }) => {
           })
         ));
 
+      // EXCESSIVE COMMENTING: We calculate the stars based on the exact same metric as the map tooltip visual layer, ensuring 1:1 behavioral alignment.
+      const tierCondition = determinePlanetTier(planet.BuildRequirements) >= (filters.minStars || 0);
+
       return planetTypeCondition && planetFertility && gravityCondition && temperatureCondition &&
-             pressureCondition && cogcCondition;
+             pressureCondition && cogcCondition && tierCondition;
     });
 
     // Remove duplicates
@@ -347,7 +353,6 @@ export const SearchProvider = ({ children }) => {
     clearSearch();
   }, [clearSearch]);
 
-  // EXCESSIVE COMMENTING: New unified string suggester that polls all three local datastructures immediately and synthesizes a corporation category for remote FIO queries.
   const generateSuggestions = useCallback((term) => {
     if (!term || term.trim().length === 0) return [];
     const lowerTerm = term.toLowerCase().trim();
@@ -410,7 +415,6 @@ export const SearchProvider = ({ children }) => {
     return unique;
   }, [materials, universeData, planetData]);
 
-  // EXCESSIVE COMMENTING: Centralized router module for resolving the newly unified queries into the appropriate legacy execution pathways while adjusting context states securely.
   const executeUnifiedSearch = useCallback(async (option) => {
     clearSearch(); 
     let results = [];
@@ -460,8 +464,8 @@ export const SearchProvider = ({ children }) => {
         setResourceTypeFilter,
         isCompanySearch,
         toggleCompanySearch,
-        generateSuggestions, // EXPOSED: Allows components to access dataset polling
-        executeUnifiedSearch // EXPOSED: Core pipeline endpoint for all dynamic query types
+        generateSuggestions, 
+        executeUnifiedSearch 
       }}
     >
       {children}
