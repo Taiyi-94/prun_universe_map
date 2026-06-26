@@ -20,14 +20,6 @@ body {
   background-color: #222222;
 }
 
-.header-right {
-    display: flex;
-    align-items: center; 
-    justify-content: center;
-    flex-wrap: nowrap; 
-    margin-left: 5px;
-}
-
 .header-left, .header-center {
   display: flex;
   align-items: center;
@@ -61,40 +53,9 @@ body {
 
 .material-search-field,
 .search-field,
-.unified-search-container,
-.clear-button,
-.pathfinding-toggle-container {
-  margin: 2px 5px; 
+.clear-button {
+  margin: 0; 
 }
-
-.toggle-stack-container {
-  display: flex;
-  flex-direction: column;
-  gap: 0px;
-  position: relative;
-  align-items: stretch;
-  min-width: 90px;     
-}
-
-.toggle-stack-container .pathfinding-toggle-container {
-    margin: 1px 0; 
-    width: 100%;
-}
-
-.toggle-stack-container .toggle-token {
-    width: 100%;
-    padding: 3px 5px;
-    font-size: 12px;
-    text-align: center;
-    box-sizing: border-box;
-}
-
-.gateway-toggle-btn {
-    width: 100%; 
-    text-align: center;
-    margin: 0; 
-}
-
 
 .App-logo {
   width: 50px;
@@ -161,7 +122,6 @@ body {
   border-radius: 4px 0 0 4px;
   background-color: #333;
   color: #fff;
-  margin-left: 5px;
   width: 250px;
 }
 
@@ -231,7 +191,7 @@ body {
 }
 
 .sidebar .planet-id-link {
-  color: #FFC107;            /* amber/gold */
+  color: #FFC107;            
   text-decoration: none;
 }
 
@@ -240,7 +200,7 @@ body {
 }
 
 .sidebar .planet-id-link:hover {
-  color: #FFECB3;            /* pale gold */
+  color: #FFECB3;            
   text-decoration: underline;
 }
 
@@ -275,36 +235,8 @@ body {
   margin-left: 5px;
 }
 
-.pathfinding-toggle {
-  display: flex;
-  align-items: center;
-  cursor: pointer;
-  font-size: 12px;
-  width: 100%;
-  justify-content: center;
-}
-
-.pathfinding-toggle .toggle-token {
-  margin: 0px;
-  /* margin-right: 8px; Removed to center in stack */
-}
-
-.pathfinding-toggle .toggle-token::before {
-  content: "Pathfinding";
-}
-
-.meteor-density-toggle {
-    width: 100%;
-    display: flex;
-    justify-content: center;
-}
-
-.meteor-density-toggle .toggle-token::before {
-  content: "Data Overlay";
-}
-
 .info-tooltip-container {
-  margin-top: 5px;
+  margin-top: 0px;
   margin-left: 5px;
   margin-right: 5px;
 }
@@ -332,12 +264,6 @@ body {
 .search-highlight {
   transform-box: fill-box;
   transform-origin: center;
-}
-
-search-container {
-  display: flex;
-  align-items: center;
-  margin-right: 10px;
 }
 
 .search-button {
@@ -475,7 +401,6 @@ search-container {
     padding: 2px;
 }
 
-/* Sidebar Gateway Styles */
 .gateway-sidebar-content {
     display: flex;
     flex-direction: column;
@@ -567,7 +492,6 @@ search-container {
     padding: 30px 10px;
 }
 
-/* Toggle Tokens (Shared) */
 .toggle-token {
   font-size: 12px;
   padding: 5px 9px;
@@ -586,19 +510,18 @@ search-container {
   border-color: #f7a600;
 }
 
-/* --- UNIFIED SEARCH FIELD STYLES --- */
 .unified-search-container {
   position: relative;
   display: flex;
   align-items: center;
-  margin: 2px 5px;
+  margin: 0;
 }
 
 .search-dropdown {
   position: absolute;
   top: 100%;
-  left: 5px; /* Alignment shift for standard offset */
-  width: calc(100% - 70px);
+  left: 0px; 
+  width: calc(100% - 65px);
   background-color: #222;
   border: 1px solid #444;
   border-radius: 0 0 4px 4px;
@@ -721,18 +644,13 @@ search-container {
   }
 
   .header-left {
-    display: none; /* This hides the logo and title */
+    display: none; 
   }
 
-  .header-right, .header-info .header-buttons {
-    flex-direction: column;
-  }
-
-  .header-left, .header-center, .header-right, .header-info .header-buttons {
+  .header-center {
     flex: 0 1 auto;
   }
 
-  /* Adjust standard controls for mobile */
   .standard-controls-container {
       flex-wrap: wrap;
       justify-content: center !important;
@@ -773,11 +691,11 @@ search-container {
   .unified-search-input {
     padding: 3px 5px;
     font-size: 12px;
-    width: 200px; /* Reduced width for mobile */
+    width: 200px; 
   }
 
   .search-dropdown {
-    width: calc(100% - 60px); /* Adjust dropdown bounds */
+    width: calc(100% - 60px); 
   }
 
   .search-button {
@@ -795,14 +713,6 @@ search-container {
   .info-tooltip-container {
     margin-top: 0px;
     margin-left: 5px;
-  }
-
-  .pathfinding-toggle .toggle-token::before {
-    content: "Path";
-  }
-
-  .meteor-density-toggle .toggle-token::before {
-    content: "Data";
   }
 
   .sidebar {

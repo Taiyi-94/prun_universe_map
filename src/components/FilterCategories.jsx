@@ -1,6 +1,9 @@
 import React, { useContext, useState } from 'react';
 import { SearchContext } from '../contexts/SearchContext';
 import { useCogcOverlay } from '../contexts/CogcOverlayContext';
+import { SelectionContext } from '../contexts/SelectionContext';
+import { useDataPoints } from '../contexts/DataPointContext';
+import { useMapMode, MAP_MODES } from '../contexts/MapModeContext';
 import { cogcPrograms } from '../constants/cogcPrograms';
 import ResourceThresholdFilter from './ResourceThresholdFilter';
 
@@ -88,7 +91,43 @@ const CogcFilter = ({ active, program, onToggle, onProgramChange }) => {
   );
 };
 
-// EXCESSIVE COMMENTING: Extracted the Basic filters (Fertile, Stars, CoGC) into their own exportable block. 
+// EXCESSIVE COMMENTING: Recreated the scattered mapping overlay buttons inside a unified container to render cleanly on the Advanced Options line. 
+const MapModesFilter = () => {
+  const { isPathfindingEnabled, togglePathfinding } = useContext(SelectionContext);
+  const { isOverlayVisible, toggleOverlayVisibility } = useDataPoints();
+  const { activeMode, toggleMode } = useMapMode();
+
+  return (
+    <div className="filter-category">
+      <h4>Map Overlays</h4>
+      <div className="toggle-group">
+        <ToggleToken
+          label="Gateway Mode"
+          active={activeMode === MAP_MODES.GATEWAY}
+          onClick={toggleMode}
+          tooltip="Toggle Gateway Planning Mode"
+          className="toggle-token1"
+        />
+        <ToggleToken
+          label="Pathfinding"
+          active={isPathfindingEnabled}
+          onClick={togglePathfinding}
+          tooltip="Toggle Pathfinding Navigation"
+          className="toggle-token-mid"
+        />
+        <ToggleToken
+          label="Data Overlay"
+          active={isOverlayVisible}
+          onClick={toggleOverlayVisibility}
+          tooltip="Toggle Meteor Density & System Names"
+          className="toggle-token2"
+        />
+      </div>
+    </div>
+  );
+};
+
+
 export const BasicFilters = () => {
   const { filters, updateFilters } = useContext(SearchContext);
   const [cogcActive, setCogcActive] = useState(false);
@@ -133,7 +172,6 @@ export const BasicFilters = () => {
       <div className="filter-category">
         <h4>Features</h4>
         <div className="toggle-group">
-          {/* EXCESSIVE COMMENTING: Safely isolated Fertile as a standalone pill button, retaining its context link to the 'planetType' array natively. */}
           <ToggleToken
             label="Fertile"
             active={filters.planetType.includes('Fertile')}
@@ -156,7 +194,6 @@ export const BasicFilters = () => {
   );
 };
 
-// EXCESSIVE COMMENTING: Extracted the heavy environment and resource sliders into their own secondary block.
 export const AdvancedFilters = () => {
   const { filters, updateFilters } = useContext(SearchContext);
 
@@ -201,6 +238,7 @@ export const AdvancedFilters = () => {
         onChange={option => handleChange('pressure', option)}
       />
       <ResourceThresholdFilter />
+      <MapModesFilter />
     </div>
   );
 };
