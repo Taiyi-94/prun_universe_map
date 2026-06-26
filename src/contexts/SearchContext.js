@@ -347,6 +347,90 @@ export const SearchProvider = ({ children }) => {
     clearSearch();
   }, [clearSearch]);
 
+  // EXCESSIVE COMMENTING: New unified string suggester that polls all three local datastructures immediately and synthesizes a corporation category for remote FIO queries.
+  const generateSuggestions = useCallback((term) => {
+    if (!term || term.trim().length === 0) return [];
+    const lowerTerm = term.toLowerCase().trim();
+    const suggestions = [];
+
+    // Scan materials
+    if (materials) {
+        materials.forEach(m => {
+            if (m.Ticker.toLowerCase().includes(lowerTerm) || m.Name.toLowerCase().includes(lowerTerm)) {
+                suggestions.push({ text: m.Ticker, label: m.Name, category: 'Resource' });
+            }
+        });
+    }
+    
+    // Scan systems
+    if (universeData) {
+        Object.values(universeData).forEach(sysArr => {
+            const sys = sysArr[0];
+            if (sys.Name.toLowerCase().includes(lowerTerm) || sys.NaturalId.toLowerCase().includes(lowerTerm)) {
+                suggestions.push({ text: sys.NaturalId, label: sys.Name, category: 'System' });
+            }
+        });
+    }
+    
+    // Scan planets
+    if (planetData) {
+        Object.values(planetData).forEach(planets => {
+            planets.forEach(p => {
+                if (p.PlanetName.toLowerCase().includes(lowerTerm) || p.PlanetNaturalId.toLowerCase().includes(lowerTerm)) {
+                    suggestions.push({ text: p.PlanetNaturalId, label: p.PlanetName, category: 'Planet' });
+                }
+            });
+        });
+    }
+
+    // Add a synthetic corporation search option inherently without spamming the remote FIO endpoint.
+    suggestions.push({ text: term.toUpperCase(), label: 'Search FIO Database', category: 'Corporation' });
+
+    // Enforce Exact-Match precedence weighting in the dropdown logic
+    suggestions.sort((a, b) => {
+        const aExact = a.text.toLowerCase() === lowerTerm;
+        const bExact = b.text.toLowerCase() === lowerTerm;
+        if (aExact && !bExact) return -1;
+        if (!aExact && bExact) return 1;
+        return a.text.length - b.text.length;
+    });
+
+    // Strip duplicates and limit to a flat 15 index limit to maintain high FPS performance
+    const unique = [];
+    const seen = new Set();
+    for (const s of suggestions) {
+        const key = `${s.text}-${s.category}`;
+        if (!seen.has(key)) {
+            seen.add(key);
+            unique.push(s);
+        }
+        if (unique.length >= 15) break;
+    }
+
+    return unique;
+  }, [materials, universeData, planetData]);
+
+  // EXCESSIVE COMMENTING: Centralized router module for resolving the newly unified queries into the appropriate legacy execution pathways while adjusting context states securely.
+  const executeUnifiedSearch = useCallback(async (option) => {
+    clearSearch(); 
+    let results = [];
+
+    if (option.category === 'Corporation') {
+        setIsCompanySearch(true);
+        setCompanySearchTerm(option.text);
+        results = await handleCompanySearch(option.text);
+    } else if (option.category === 'Resource') {
+        setIsCompanySearch(false);
+        setMaterialSearchTerm(option.text);
+        results = handleMaterialSearch(option.text);
+    } else if (option.category === 'System' || option.category === 'Planet' || option.category === 'General') {
+        setIsCompanySearch(false);
+        setSystemSearchTerm(option.text);
+        results = handleSystemSearch(option.text);
+    }
+    return results;
+  }, [clearSearch, handleCompanySearch, handleMaterialSearch, handleSystemSearch]);
+
 
   return (
     <SearchContext.Provider
@@ -376,6 +460,8 @@ export const SearchProvider = ({ children }) => {
         setResourceTypeFilter,
         isCompanySearch,
         toggleCompanySearch,
+        generateSuggestions, // EXPOSED: Allows components to access dataset polling
+        executeUnifiedSearch // EXPOSED: Core pipeline endpoint for all dynamic query types
       }}
     >
       {children}

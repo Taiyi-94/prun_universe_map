@@ -1,13 +1,13 @@
 import React, { useState, useContext } from 'react';
 import FilterCategories from './FilterCategories';
-import MaterialSearchField from './MaterialSearchField';
-import SearchField from './SearchField';
+import UnifiedSearchField from './UnifiedSearchField';
 import { SearchContext } from '../contexts/SearchContext';
 
 const StandardControls = () => {
   const [showFilters, setShowFilters] = useState(window.innerWidth > 768);
-  const { clearSearch, toggleCompanySearch, isCompanySearch } = useContext(SearchContext);
+  const { clearSearch } = useContext(SearchContext);
 
+  // EXCESSIVE COMMENTING: The unified StandardControls now relies strictly on UnifiedSearchField. The deprecated toggle button for FIO company mode is entirely eradicated as the synthetic category approach handles that context switch automatically.
   return (
     <div className="standard-controls-container" style={{ display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between' }}>
       
@@ -25,20 +25,12 @@ const StandardControls = () => {
       <div style={{ display: 'flex', alignItems: 'center' }}>
           {/* Mimics original .header-right */}
           <div className="std-right-group">
-            <MaterialSearchField />
-            <SearchField />
+            <UnifiedSearchField />
           </div>
 
           {/* Mimics original .header-buttons */}
           <div className="std-buttons-group">
              <button className="clear-button" onClick={clearSearch}>Clear</button>
-             <button
-                onClick={toggleCompanySearch}
-                className={`toggle-token company-search-toggle ${isCompanySearch ? 'active' : ''}`}
-                data-tooltip={"Enter company code to search base data using FIO"}
-             >
-             Company
-             </button>
           </div>
       </div>
     </div>
