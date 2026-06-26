@@ -2,7 +2,6 @@ import React, { useState, useContext, useEffect, useRef } from 'react';
 import { SearchContext } from '../contexts/SearchContext';
 
 const UnifiedSearchField = () => {
-  // EXCESSIVE COMMENTING: We alias the globally managed `unifiedSearchTerm` to `inputValue` locally to preserve all the downstream component logic while allowing the Clear button in the Context to wipe the text.
   const { 
     unifiedSearchTerm: inputValue, 
     setUnifiedSearchTerm: setInputValue, 
@@ -15,10 +14,8 @@ const UnifiedSearchField = () => {
   const [disambiguationOptions, setDisambiguationOptions] = useState([]);
   const [notification, setNotification] = useState('');
   
-  // Ref to detect clicks outside the dropdown wrapper to close it automatically
   const wrapperRef = useRef(null);
 
-  // EXCESSIVE COMMENTING: Close the dropdown if a user clicks outside the bounding box of the search field component.
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
@@ -29,22 +26,33 @@ const UnifiedSearchField = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // EXCESSIVE COMMENTING: To prevent degrading UI performance by scanning ~4000 planets/systems on every keystroke, we debounce the input by 150ms.
+  // EXCESSIVE COMMENTING: Upgraded to an asynchronous debounce. We added an `isCurrent` boolean to guard against race conditions: if a user types rapidly, we only want the final, most recent API poll to update the `suggestions` state. 
   useEffect(() => {
-    const timer = setTimeout(() => {
+    let isCurrent = true;
+    
+    const timer = setTimeout(async () => {
       if (inputValue.trim().length > 0 && !inputValue.includes('(')) {
-        const results = generateSuggestions(inputValue);
-        setSuggestions(results);
-        setShowDropdown(true);
+        const results = await generateSuggestions(inputValue);
+        
+        // Prevent state updates if the user continued typing while the FIO network request was resolving
+        if (isCurrent) {
+          setSuggestions(results);
+          setShowDropdown(true);
+        }
       } else {
-        setSuggestions([]);
-        setShowDropdown(false);
+        if (isCurrent) {
+          setSuggestions([]);
+          setShowDropdown(false);
+        }
       }
-    }, 150);
-    return () => clearTimeout(timer);
+    }, 250); // Increased debounce slightly to 250ms to be polite to the external FIO database
+    
+    return () => {
+      isCurrent = false;
+      clearTimeout(timer);
+    };
   }, [inputValue, generateSuggestions]);
 
-  // EXCESSIVE COMMENTING: Handle selection from either the dropdown or the disambiguation modal. This modifies the text to visually indicate the category.
   const handleSelect = async (option) => {
     setInputValue(`${option.text} (${option.category})`);
     setShowDropdown(false);
@@ -59,12 +67,10 @@ const UnifiedSearchField = () => {
     }
   };
 
-  // EXCESSIVE COMMENTING: Evaluates logic when the user forcefully hits 'Enter' inside the input box.
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (disambiguationOptions.length > 0) return; // Prevent submission if disambiguation modal is active
+    if (disambiguationOptions.length > 0) return; 
 
-    // EXCESSIVE COMMENTING: If the input is completely empty and the user hits enter, execute a wild card search (General category, empty text) to show everything matching the filters.
     if (!inputValue.trim()) {
       await executeUnifiedSearch({ text: '', category: 'General' });
       return;
@@ -73,14 +79,12 @@ const UnifiedSearchField = () => {
     let parsedText = inputValue;
     let parsedCategory = null;
 
-    // EXCESSIVE COMMENTING: Check if the string matches the autocompleted format using regex. E.g., "AL (Resource)"
     const suffixMatch = inputValue.match(/^(.*)\s+\((Resource|System|Planet|Corporation)\)$/i);
     if (suffixMatch) {
       parsedText = suffixMatch[1].trim();
-      parsedCategory = suffixMatch[2].charAt(0).toUpperCase() + suffixMatch[2].slice(1).toLowerCase(); // Normalize casing
+      parsedCategory = suffixMatch[2].charAt(0).toUpperCase() + suffixMatch[2].slice(1).toLowerCase(); 
     }
 
-    // EXCESSIVE COMMENTING: If category is explicitly defined, execute search immediately.
     if (parsedCategory) {
       const results = await executeUnifiedSearch({ text: parsedText, category: parsedCategory });
       if (!results || results.length === 0) {
@@ -92,30 +96,24 @@ const UnifiedSearchField = () => {
       return;
     }
 
-    // EXCESSIVE COMMENTING: Locate any exact matches inside our current dropdown suggestions comparing lowercase string equality.
     const exactMatches = suggestions.filter(s => s.text.toLowerCase() === inputValue.trim().toLowerCase());
 
-    // EXCESSIVE COMMENTING: If multiple EXACT matches exist across different categories, we evaluate conflict resolution.
     if (exactMatches.length > 1) {
-      // EXCESSIVE COMMENTING: Due to FIO Corporation names frequently colliding with base game Resource tickers (e.g., 'AL', 'FE'), and Resources being vastly more commonly searched by users, we implement a priority bypass.
       const resourceMatch = exactMatches.find(match => match.category === 'Resource');
       
       if (resourceMatch) {
         handleSelect(resourceMatch);
         return;
       } else {
-        // EXCESSIVE COMMENTING: If no Resource is involved in the collision, we fall back to triggering the manual disambiguation modal to let the user decide.
         setDisambiguationOptions(exactMatches);
         setShowDropdown(false);
         return;
       }
     }
 
-    // EXCESSIVE COMMENTING: If only one exact match exists, or none exist but we have partial matches, execute search on the top option.
     if (suggestions.length > 0) {
       handleSelect(suggestions[0]);
     } else {
-      // EXCESSIVE COMMENTING: Absolute fallback for general string matching across the entire local dataset if no suggestions triggered properly.
       const results = await executeUnifiedSearch({ text: inputValue, category: 'General' });
       if (!results || results.length === 0) {
         setNotification('No matches found');
@@ -140,7 +138,6 @@ const UnifiedSearchField = () => {
         <button type="submit" className="search-button">Search</button>
       </form>
 
-      {/* EXCESSIVE COMMENTING: Autocomplete dropdown UI, shown conditionally based on input state. */}
       {showDropdown && suggestions.length > 0 && (
         <ul className="search-dropdown">
           {suggestions.map((opt, idx) => (
@@ -160,7 +157,6 @@ const UnifiedSearchField = () => {
         </ul>
       )}
 
-      {/* EXCESSIVE COMMENTING: Disambiguation modal explicitly for exact match conflicts. */}
       {disambiguationOptions.length > 0 && (
         <div className="disambiguation-overlay">
           <div className="disambiguation-dialog">
@@ -179,7 +175,6 @@ const UnifiedSearchField = () => {
         </div>
       )}
 
-      {/* EXCESSIVE COMMENTING: Render notification block natively within the component bounding space. */}
       {notification && <div className="search-notification">{notification}</div>}
     </div>
   );

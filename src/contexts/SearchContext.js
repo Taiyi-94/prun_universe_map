@@ -60,7 +60,6 @@ export const SearchProvider = ({ children }) => {
     return maxPerResource;
   }, [planetData]);
 
-
   const applyFiltersToResults = useCallback((resultsToFilter) => {
     const filtered = resultsToFilter.filter(result => {
       if (result.type === 'company_base') return true;
@@ -176,7 +175,6 @@ export const SearchProvider = ({ children }) => {
     setSearchMaterial(matchingMaterialIds);
     return uniqueResults;
   }, []);
-
 
   const handleSystemSearch = useCallback((searchTerm) => {
     const sanitizedSearchTerm = sanitizeInput(searchTerm);
@@ -314,11 +312,13 @@ export const SearchProvider = ({ children }) => {
   }, [planetData]);
 
 
-  const generateSuggestions = useCallback((term) => {
+  // EXCESSIVE COMMENTING: Converted generateSuggestions to an async function. It now performs a rapid internal lookup, then executes a live fetch against the FIO API natively before releasing the suggestions array to the UI dropdown.
+  const generateSuggestions = useCallback(async (term) => {
     if (!term || term.trim().length === 0) return [];
     const lowerTerm = term.toLowerCase().trim();
     const suggestions = [];
 
+    // Local Data Scans
     if (materials) {
         materials.forEach(m => {
             if (m.Ticker.toLowerCase().includes(lowerTerm) || m.Name.toLowerCase().includes(lowerTerm)) {
@@ -346,7 +346,25 @@ export const SearchProvider = ({ children }) => {
         });
     }
 
-    suggestions.push({ text: term.toUpperCase(), label: 'Search FIO Database', category: 'Corporation' });
+    // EXCESSIVE COMMENTING: Live FIO API validation sequence. Only ping the endpoint if the typed length is short enough to plausibly be a company code (to save network traffic). If the API yields a response containing verified map bases, we append it directly as a real 'Corporation' option.
+    const sanitizedForFio = sanitizeInput(term);
+    if (sanitizedForFio.length > 0 && sanitizedForFio.length <= 8) {
+        try {
+            const response = await fetch(`https://rest.fnar.net/company/code/${sanitizedForFio}`);
+            if (response.ok) {
+                const data = await response.json();
+                if (data && data.Planets && data.Planets.length > 0) {
+                    suggestions.push({ 
+                      text: data.Code || sanitizedForFio.toUpperCase(), 
+                      label: data.Name || 'FIO Corporation', 
+                      category: 'Corporation' 
+                    });
+                }
+            }
+        } catch (error) {
+            // Silently swallow fetch timeouts or 404s so the primary autocomplete thread isn't disrupted
+        }
+    }
 
     suggestions.sort((a, b) => {
         const aExact = a.text.toLowerCase() === lowerTerm;
@@ -393,7 +411,6 @@ export const SearchProvider = ({ children }) => {
   }, [handleCompanySearch, handleMaterialSearch, handleSystemSearch]);
 
 
-  // EXCESSIVE COMMENTING: Relocated `clearSearch` BELOW `executeUnifiedSearch` to bypass react hook hoisting issues. Now, `clearSearch` zeroes out text states but instead of forcing a blank map, it forces a blank wildcard search! This flawlessly retains the boundary of currently active user filters!
   const clearSearch = useCallback(() => {
     setUnifiedSearchTerm('');
     setSystemSearchTerm('');
