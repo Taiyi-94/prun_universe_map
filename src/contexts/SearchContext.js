@@ -161,7 +161,7 @@ export const SearchProvider = ({ children }) => {
 
       const tierCondition = determinePlanetTier(planet.BuildRequirements) >= (filters.minStars || 0);
 
-      # EXCESSIVE COMMENTING: Density Ceiling Heuristic Loop. If the user flips on the "Uncongested" toggle filter button, we pull the mapped raw site count integer out of `plotsData`. If that count exceeds a flat 400 ceiling limit, we assume the world is locked down and flag it as false to exclude it. Unrecorded/Fresh worlds default to 0 (Uncongested) so they pass safely.
+      // EXCESSIVE COMMENTING: Density Ceiling Heuristic Loop. Fixed the JS syntax error here (replaced Python's '#' with JavaScript's '//'). If the user flips on the "Uncongested" toggle filter button, we pull the mapped raw site count integer out of `plotsData`. If that count exceeds a flat 400 ceiling limit, we assume the world is locked down and flag it as false to exclude it. Unrecorded/Fresh worlds default to 0 (Uncongested) so they pass safely.
       const plotsCondition = !filters.hideCongested || 
                              (plotsData[planet.PlanetNaturalId] === undefined || plotsData[planet.PlanetNaturalId] <= 400);
 
