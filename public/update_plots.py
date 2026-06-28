@@ -1,77 +1,57 @@
 import json
 import urllib.request
-import urllib.error
 import os
 
-# Bulk FIO v2 endpoints
-URL_PLANETS = "https://api.fnar.net/planet?include_resources=false&include_workforce_fees=false&include_cogc_programs=false&include_population_reports=false&include_celestial_bodies=false"
+# EXCESSIVE COMMENTING: This is the lightning-fast daily updater. It utilizes the one-time generated cache to perform a subtraction operation against the instant bulk FIO sitecounts endpoint.
+
+CACHE_FILE = os.path.join(os.path.dirname(__file__), "total_plots_cache.json")
+OUTPUT_FILE = os.path.join(os.path.dirname(__file__), "plots_data.json")
 URL_SITECOUNTS = "https://api.fnar.net/planet/sitecount?include_non_player_sites=true"
 
-OUTPUT_FILE = os.path.join(os.path.dirname(__file__), "plots_data.json")
-
 def fetch_json(url):
-    req = urllib.request.Request(
-        url, 
-        headers={
-            'User-Agent': 'Mozilla/5.0 (Taiyi Map Bulk Updater)',
-            'Accept': 'application/json'
-        }
-    )
-    try:
-        with urllib.request.urlopen(req) as response:
-            return json.loads(response.read().decode())
-    except urllib.error.HTTPError as e:
-        # DIAGNOSTIC UPDATE: Capture and print the actual response body from the server
-        print(f"\n[!] HTTP Error {e.code} encountered!")
-        print(f"Target URL: {url}")
-        try:
-            error_body = e.read().decode('utf-8')
-            print(f"Server Response Body:\n{error_body}\n")
-        except Exception as decode_error:
-            print(f"Could not decode error body: {decode_error}")
-        raise e
+    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Taiyi Map Updater)'})
+    with urllib.request.urlopen(req) as response:
+        return json.loads(response.read().decode())
 
 def update_plots_data():
-    print("Initiating bulk FIO API fetch...")
+    print("Initiating instant availability calculation...")
+    
+    if not os.path.exists(CACHE_FILE):
+        print(f"ERROR: {CACHE_FILE} not found!")
+        print("Please run 'python3 public/setup_total_plots.py' once to generate the static plot capacities.")
+        return
+        
+    with open(CACHE_FILE, 'r', encoding='utf-8') as f:
+        total_plots_map = json.load(f)
+        
     try:
-        print("Fetching total planetary capacities...")
-        planets_data = fetch_json(URL_PLANETS)
-        
-        print("Fetching active site counts...")
+        print(f"Fetching active site counts from {URL_SITECOUNTS}...")
         sites_data = fetch_json(URL_SITECOUNTS)
-
-        print("Processing availability mapping...")
         
-        # 1. Map NaturalId -> Total Plots
-        total_plots_map = {}
-        for p in planets_data:
-            nat_id = p.get("NaturalId")
-            total = p.get("Plots", 0)
-            if nat_id:
-                total_plots_map[nat_id] = total
-
-        # 2. Map PlanetNaturalId -> Used Plots
+        # 1. Map PlanetNaturalId -> Used Plots
         used_plots_map = {}
         for s in sites_data:
             nat_id = s.get("PlanetNaturalId")
-            count = s.get("Count", 0)
             if nat_id:
-                used_plots_map[nat_id] = count
-
-        # 3. Calculate Available = Total - Used
+                used_plots_map[nat_id] = s.get("Count", 0)
+                
+        print("Calculating exact availability (Total - Used)...")
+        
+        # 2. Perform the exact math
         available_plots_map = {}
         for nat_id, total_capacity in total_plots_map.items():
             used = used_plots_map.get(nat_id, 0)
+            # Ensure we never drop below 0 due to API desync quirks
             available = max(0, total_capacity - used)
             available_plots_map[nat_id] = available
-
+            
         with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
             json.dump(available_plots_map, f, indent=2)
-
-        print(f"Success! Processed {len(available_plots_map)} planets. Saved to {OUTPUT_FILE}.")
-
+            
+        print(f"Success! Exact availability mapped for {len(available_plots_map)} planets. Saved to {OUTPUT_FILE}")
+        
     except Exception as e:
-        print(f"Error executing bulk fetch: {e}")
+        print(f"Error fetching live data: {e}")
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     update_plots_data()
