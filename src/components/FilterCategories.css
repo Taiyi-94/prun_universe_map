@@ -25,7 +25,7 @@
 
 /* EXCESSIVE COMMENTING: Added explicit middle-token styling removing the border radii entirely to allow 3+ button strips to fuse neatly. */
 .toggle-token-mid {
-  padding: 5px 9px;
+  padding: 5px 5px;
   border-radius: 0px;
   margin: 2px 1px;
 }
@@ -88,34 +88,68 @@
   white-space: pre-wrap;
 }
 
+/* The Relative / Type / Threshold trio forms one connected segmented control,
+   with the % readout trailing on the right. */
+.resource-filter-controls {
+  display: flex;
+  align-items: stretch;
+}
+
+.resource-relative-btn,
+.resource-type-select,
 .resource-threshold-input {
-  width: 50px;
-  padding: 5px;
-  margin-right: 5px;
+  height: 30px;
+  box-sizing: border-box;
   border: 1px solid #ccc;
-  border-radius: 14px;
   background-color: #333;
   color: #fff;
+  font-size: 12px;
+  margin: 0;
+}
+
+/* Left segment: rounded outer (left) corners, flat where it meets the dropdown. */
+.resource-relative-btn {
+  border-radius: 14px 0 0 14px;
+  padding: 0 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  /* Match the Gravity/Temp/Pressure toggle colouring. */
+  background-color: #f0f0f0;
+  color: #333;
+}
+
+.resource-relative-btn.active {
+  background-color: #f7a600;
+  border-color: #f7a600;
+  color: white;
+}
+
+/* Middle segment: flat on both sides, sharing borders with its neighbours.
+   Selector is scoped under the container to outrank the generic `.filter-category select`
+   rule (which would otherwise re-round the right corner and apply a light background). */
+.resource-filter-controls select.resource-type-select {
+  border: 1px solid #ccc;
+  border-radius: 0;
+  border-left: none;
+  margin: 0;
+  padding: 0 8px;
+  background-color: #333;
+  color: #fff;
+}
+
+/* Right segment: flat where it meets the dropdown, rounded outer (right) corner. */
+.resource-threshold-input {
+  width: 62px;
+  border-radius: 0 14px 14px 0;
+  border-left: none;
+  padding: 0 8px;
 }
 
 .resource-threshold-value {
   font-size: 14px;
   color: #f7a600;
-}
-
-.resource-threshold-controls {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.resource-type-filter select {
-  padding: 5px;
-  border-radius: 15px;
-  border: 1px solid #ccc;
-  background-color: #333;
-  color: #fff;
-  font-size: 12px;
+  margin-left: 8px;
+  align-self: center;
 }
 
 @media (max-width: 820px) {
@@ -140,17 +174,31 @@
     font-size: 10px;
   }
 
+  /* Keep the segmented control flat-cornered on mobile (overrides the rounded select above). */
+  .resource-relative-btn,
+  .resource-type-select,
   .resource-threshold-input {
-    width: 50px;
-    padding: 3px;
+    height: 26px;
     font-size: 10px;
+  }
+
+  .resource-relative-btn {
+    border-radius: 13px 0 0 13px;
+    padding: 0 8px;
+  }
+
+  .resource-filter-controls select.resource-type-select {
+    border-radius: 0;
+    padding: 0 5px;
+  }
+
+  .resource-threshold-input {
+    width: 48px;
+    border-radius: 0 13px 13px 0;
+    padding: 0 5px;
   }
 
   .resource-threshold-value {
     font-size: 10px;
-  }
-
-  .resource-threshold-controls {
-    flex-wrap: wrap;
   }
 }

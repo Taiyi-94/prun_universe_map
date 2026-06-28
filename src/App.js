@@ -43,7 +43,7 @@ const AppContent = () => {
         </div>
         
         {/* EXCESSIVE COMMENTING: The header center now consumes the entire remaining flex space, allowing StandardControls to organize the UI in a single horizontal swath. The right-hand stack panel was deleted. */}
-        <div className="header-center" style={{ flex: '1 1 auto', justifyContent: 'flex-start', width: '100%', paddingLeft: '10px' }}>
+        <div className="header-center" style={{ flex: '1 1 auto', justifyContent: 'flex-start', paddingLeft: '10px' }}>
             {activeMode === MAP_MODES.STANDARD ? <StandardControls /> : <GatewayControls />}
         </div>
       </header>
