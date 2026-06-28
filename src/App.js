@@ -1,9 +1,6 @@
 import React, { useState } from 'react';
 import UniverseMap from './components/UniverseMap';
 import Sidebar from './components/Sidebar';
-import PathfindingToggle from './components/PathfindingToggle';
-import MeteorDensityToggle from './components/MeteorDensityToggle';
-import InfoTooltip from './components/InfoTooltip';
 import StandardControls from './components/StandardControls';
 import GatewayControls from './components/GatewayControls';
 import { GraphProvider } from './contexts/GraphContext';
@@ -35,7 +32,7 @@ const App = () => {
 };
 
 const AppContent = () => {
-  const { activeMode, toggleMode } = useMapMode();
+  const { activeMode } = useMapMode();
 
   return (
     <div className="App">
@@ -45,34 +42,9 @@ const AppContent = () => {
           <h1>Taiyi's Prosperous Universe Map</h1>
         </div>
         
-        <div className="header-center">
+        {/* EXCESSIVE COMMENTING: The header center now consumes the entire remaining flex space, allowing StandardControls to organize the UI in a single horizontal swath. The right-hand stack panel was deleted. */}
+        <div className="header-center" style={{ flex: '1 1 auto', justifyContent: 'flex-start', width: '100%', paddingLeft: '10px' }}>
             {activeMode === MAP_MODES.STANDARD ? <StandardControls /> : <GatewayControls />}
-        </div>
-
-        <div className="header-right">
-             <InfoTooltip />
-             <div className="toggle-stack-container">
-                {/* Gateway Toggle (Top) */}
-                <div className="pathfinding-toggle-container">
-                    <button 
-                        className={`toggle-token gateway-toggle-btn ${activeMode === MAP_MODES.GATEWAY ? 'active' : ''}`}
-                        onClick={toggleMode}
-                        data-tooltip="Toggle Gateway Planning Mode"
-                    >
-                        Gateway
-                    </button>
-                </div>
-
-                {/* Pathfinding Toggle (Middle) */}
-                <div className="pathfinding-toggle-container">
-                    <PathfindingToggle />
-                </div>
-
-                {/* Data Toggle (Bottom) */}
-                <div className="pathfinding-toggle-container">
-                    <MeteorDensityToggle />
-                </div>
-             </div>
         </div>
       </header>
       

@@ -1,26 +1,20 @@
-import React, { createContext, useState, useCallback, useContext, useMemo } from 'react';
+import React, { createContext, useState, useCallback, useContext, useMemo, useEffect, useRef } from 'react';
 import { GraphContext } from './GraphContext';
 import { phaseMultiplier } from '../constants/phaseMultiplier';
 import { highlightSearchResults, clearHighlights } from '../utils/searchUtils';
-
+import { determinePlanetTier } from '../utils/svgUtils'; 
 
 export const SearchContext = createContext();
 
 const sanitizeInput = (input) => {
-  // Remove any HTML tags
   let sanitized = input.replace(/<[^>]*>/g, '');
-  // Remove special characters except spaces, hyphens, and parentheses
   sanitized = sanitized.replace(/[^a-zA-Z0-9\s\-()]/g, '');
-  // Trim whitespace from the beginning and end
   sanitized = sanitized.trim();
-  // Limit the length of the input
   const maxLength = 500;
   sanitized = sanitized.slice(0, maxLength);
-
   return sanitized;
 };
 
-// Helper function to split camelCase into separate words.
 const splitCamelCase = (str) => {
   return str.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
 };
@@ -32,13 +26,22 @@ export const SearchProvider = ({ children }) => {
   const [searchMaterialConcentrationLiquid, setSearchMaterialConcentrationLiquid] = useState([]);
   const [searchMaterialConcentrationGaseous, setSearchMaterialConcentrationGaseous] = useState([]);
   const [searchMaterialConcentrationMineral, setSearchMaterialConcentrationMineral] = useState([]);
+  
   const [filters, setFilters] = useState({
     planetType: ['Rocky', 'Gaseous'],
     gravity: ['Low', 'High'],
     temperature: ['Low', 'High'],
     pressure: ['Low', 'High'],
-    cogcProgram: []
+    cogcProgram: [],
+    minStars: 0,
+    requireAvailablePlots: false
   });
+  
+  const [plotsData, setPlotsData] = useState({});
+  const [unifiedSearchTerm, setUnifiedSearchTerm] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const lastQueryRef = useRef({ text: '', category: 'General' });
+
   const [systemSearchTerm, setSystemSearchTerm] = useState('');
   const [materialSearchTerm, setMaterialSearchTerm] = useState('');
   const [resourceThreshold, setResourceThreshold] = useState(0);
@@ -47,8 +50,16 @@ export const SearchProvider = ({ children }) => {
   const [companySearchTerm, setCompanySearchTerm] = useState('');
   const [isCompanySearch, setIsCompanySearch] = useState(false);
 
-  // Phase-weighted maximum factor per material across the whole universe,
-  // used to normalize relative concentration thresholds.
+  useEffect(() => {
+    fetch(`${process.env.PUBLIC_URL}/plots_data.json`)
+      .then(response => {
+        if (!response.ok) throw new Error("plots_data.json cache missing");
+        return response.json();
+      })
+      .then(data => setPlotsData(data))
+      .catch(error => console.log('Availability metrics inactive: ', error.message));
+  }, []);
+
   const maxFactorPerMaterial = useMemo(() => {
     const maxPerResource = {};
     if (planetData) {
@@ -62,136 +73,30 @@ export const SearchProvider = ({ children }) => {
     return maxPerResource;
   }, [planetData]);
 
+  const applyFiltersToResults = useCallback((resultsToFilter) => {
+    const filtered = resultsToFilter.filter(result => {
+      if (result.type === 'company_base') return true;
 
-  const handleSystemSearch = useCallback((searchTerm) => {
-    const sanitizedSearchTerm = sanitizeInput(searchTerm);
-    const results = [];
-    const terms = sanitizedSearchTerm.split(/\s+/)
-        .filter(term => term.length >= 2); // Only keep terms with 1 or more characters
+      const targetPlanetId = result.planetId || (result.type === 'planet' ? result.id : null);
+      if (!targetPlanetId && result.type === 'system') return true; 
 
-    terms.forEach(term => {
-      const lowerTerm = term.toLowerCase();
-
-      // Search in systems
-      Object.entries(universeData).forEach(([systemId, systemArray]) => {
-      let system = systemArray[0]
-        if (system.Name.toLowerCase().includes(term.toLowerCase()) ||
-            system.NaturalId.toLowerCase().includes(term.toLowerCase())) {
-          results.push({ type: 'system', id: systemId });
-        }
-      });
-
-      // Search in planets
-      Object.entries(planetData).forEach(([systemId, planets]) => {
-        planets.forEach(planet => {
-          if (planet.PlanetName.toLowerCase().includes(lowerTerm) ||
-              planet.PlanetNaturalId.toLowerCase().includes(lowerTerm)) {
-            results.push({ type: 'planet', id: planet.PlanetNaturalId, systemId: systemId });
-          }
-        });
-      });
-    });
-
-    console.log('Results', results);
-    setSearchResults(results);
-    highlightSearchResults(results);
-    return results;
-  }, [universeData, planetData]);
-
-
-  const handleMaterialSearch = useCallback((searchTerm) => {
-    const sanitizedSearchTerm = sanitizeInput(searchTerm);
-    const terms = sanitizedSearchTerm.split(/\s+/)
-        .filter(term => term.length >= 1); // Only keep terms with 1 or more characters
-
-    let results = [];
-    let matchingMaterialIds = [];
-
-    if (terms.length === 0) {
-      // Populate results with all planets if no search terms
-      Object.entries(planetData).forEach(([systemId, planets]) => {
-        planets.forEach(planet => {
-          results.push({
-            type: 'planet',
-            planetId: planet.PlanetNaturalId,
-            systemId: systemId
-          });
-        });
-      });
-    } else {
-      // Find materials matching the search terms
-      const matchingMaterials = terms.map(term => {
-        const lowerTerm = term.toLowerCase();
-        const regex = new RegExp(`\\b${lowerTerm}\\b`, 'i');
-        return materials.filter(material =>
-          (regex.test(splitCamelCase(material.Name)) || regex.test(material.Ticker.toLowerCase())) &&
-          ['ores', 'gases', 'liquids', 'minerals'].includes(material.CategoryName)
-        );
-      });
-
-      matchingMaterialIds = matchingMaterials.flat().map(material => material.MaterialId);
-
-      // Find planets that have all specified materials
-      Object.entries(planetData).forEach(([systemId, planets]) => {
-        planets.forEach(planet => {
-          const hasAllMaterials = matchingMaterials.every(materialList =>
-            materialList.some(material =>
-              planet.Resources.some(resource => resource.MaterialId === material.MaterialId)
-            )
-          );
-
-          if (hasAllMaterials) {
-            const planetResources = matchingMaterials.flatMap(materialList =>
-              materialList.filter(material =>
-                planet.Resources.some(resource => resource.MaterialId === material.MaterialId)
-              )
-            );
-
-            planetResources.forEach(material => {
-              const resource = planet.Resources.find(r => r.MaterialId === material.MaterialId);
-              results.push({
-                type: 'material',
-                id: material.MaterialId,
-                name: material.Name,
-                ticker: material.Ticker,
-                planetId: planet.PlanetNaturalId,
-                systemId: systemId,
-                factor: resource.Factor,
-                resourceType: resource.ResourceType
-              });
-            });
-          }
-        });
-      });
-    }
-
-    const filteredResults = results.filter(result => {
-      const planet = planetData[result.systemId].find(p => p.PlanetNaturalId === result.planetId);
-
-      if (!planet) {
-        console.warn(`Planet not found for result:`, result);
-        return false;
-      }
+      const planet = planetData[result.systemId]?.find(p => p.PlanetNaturalId === targetPlanetId);
+      if (!planet) return false;
 
       if (result.type === 'material') {
-        // Apply resource type filter
         if (resourceTypeFilter !== 'ALL' && result.resourceType !== resourceTypeFilter) {
           return false;
         }
-
-        // Apply factor check
         let factorCheck;
         if (isRelativeThreshold) {
           if (resourceTypeFilter === 'ALL') {
-            // Use global maximum when 'ALL' is selected
-            const maxFactor = Math.max(...results
+            const maxFactor = Math.max(...resultsToFilter
               .filter(r => r.type === 'material')
               .map(r => r.factor * phaseMultiplier[r.resourceType]));
             const relativeFactor = result.factor * phaseMultiplier[result.resourceType] / maxFactor;
             factorCheck = relativeFactor >= resourceThreshold;
           } else {
-            // Use type-specific maximum when a specific type is selected
-            const maxFactor = Math.max(...results
+            const maxFactor = Math.max(...resultsToFilter
               .filter(r => r.type === 'material' && r.resourceType === resourceTypeFilter)
               .map(r => r.factor));
             const relativeFactor = result.factor / maxFactor;
@@ -200,10 +105,8 @@ export const SearchProvider = ({ children }) => {
         } else {
           factorCheck = result.factor >= resourceThreshold;
         }
+        if (!factorCheck) return false;
 
-        if (!factorCheck) {
-          return false;
-        }
       } else if (resourceThreshold > 0) {
         let factorCheck;
         if (isRelativeThreshold) {
@@ -212,11 +115,9 @@ export const SearchProvider = ({ children }) => {
             return factor / maxFactorPerMaterial[resource.MaterialId] >= resourceThreshold;
           });
         } else {
-          factorCheck = planet.Resources.some(resource =>
-            resource.Factor >= resourceThreshold);
+          factorCheck = planet.Resources.some(resource => resource.Factor >= resourceThreshold);
         }
-        if (!factorCheck)
-          return false;
+        if (!factorCheck) return false;
       }
 
       const planetTypeCondition =
@@ -252,37 +153,152 @@ export const SearchProvider = ({ children }) => {
             if (selectedProgram === null) {
               return !currentProgram || currentProgram.ProgramType === null;
             }
-
             return currentProgram && currentProgram.ProgramType === selectedProgram;
           })
         ));
 
+      const tierCondition = determinePlanetTier(planet.BuildRequirements) >= (filters.minStars || 0);
+
+      const plotsCondition = !filters.requireAvailablePlots || 
+                             (plotsData[planet.PlanetNaturalId] !== undefined && plotsData[planet.PlanetNaturalId] > 0);
+
       return planetTypeCondition && planetFertility && gravityCondition && temperatureCondition &&
-             pressureCondition && cogcCondition;
+             pressureCondition && cogcCondition && tierCondition && plotsCondition;
     });
 
-    // Remove duplicates
-    const uniqueResults = Array.from(new Set(filteredResults.map(JSON.stringify))).map(JSON.parse);
-    // Obtain the highest concentration
-    const highestFactorLiquid = uniqueResults
-      .filter(result => result.resourceType === 'LIQUID')
-      .reduce((max, item) => item.factor > max ? item.factor : max, -Infinity);
-    setSearchMaterialConcentrationLiquid(highestFactorLiquid)
-    const highestFactorGaseous = uniqueResults
-      .filter(result => result.resourceType === 'GASEOUS')
-      .reduce((max, item) => item.factor > max ? item.factor : max, -Infinity);
-    setSearchMaterialConcentrationGaseous(highestFactorGaseous)
-    const highestFactorMineral = uniqueResults
-      .filter(result => result.resourceType === 'MINERAL')
-      .reduce((max, item) => item.factor > max ? item.factor : max, -Infinity);
-    setSearchMaterialConcentrationMineral(highestFactorMineral)
+    return Array.from(new Set(filtered.map(JSON.stringify))).map(JSON.parse);
+  }, [planetData, filters, resourceThreshold, isRelativeThreshold, resourceTypeFilter, maxFactorPerMaterial, plotsData]);
 
-    console.log('Results', uniqueResults);
+
+  const finalizeAndHighlight = useCallback((uniqueResults, matchingMaterialIds = []) => {
+    const highestFactorLiquid = uniqueResults
+      .filter(r => r.resourceType === 'LIQUID')
+      .reduce((max, item) => item.factor > max ? item.factor : max, -Infinity);
+    setSearchMaterialConcentrationLiquid(highestFactorLiquid);
+    
+    const highestFactorGaseous = uniqueResults
+      .filter(r => r.resourceType === 'GASEOUS')
+      .reduce((max, item) => item.factor > max ? item.factor : max, -Infinity);
+    setSearchMaterialConcentrationGaseous(highestFactorGaseous);
+    
+    const highestFactorMineral = uniqueResults
+      .filter(r => r.resourceType === 'MINERAL')
+      .reduce((max, item) => item.factor > max ? item.factor : max, -Infinity);
+    setSearchMaterialConcentrationMineral(highestFactorMineral);
+
     setSearchResults(uniqueResults);
     highlightSearchResults(uniqueResults, highestFactorLiquid, highestFactorGaseous, highestFactorMineral);
     setSearchMaterial(matchingMaterialIds);
     return uniqueResults;
-  }, [planetData, materials, filters, resourceThreshold, isRelativeThreshold, resourceTypeFilter, maxFactorPerMaterial]);
+  }, []);
+
+  const handleSystemSearch = useCallback((searchTerm) => {
+    const sanitizedSearchTerm = sanitizeInput(searchTerm);
+    const results = [];
+    const terms = sanitizedSearchTerm.split(/\s+/).filter(term => term.length >= 1); 
+
+    if (terms.length === 0) {
+      Object.entries(planetData).forEach(([systemId, planets]) => {
+        planets.forEach(planet => {
+          results.push({ type: 'planet', id: planet.PlanetNaturalId, systemId: systemId });
+        });
+      });
+    } else {
+      terms.forEach(term => {
+        const lowerTerm = term.toLowerCase();
+
+        Object.entries(universeData).forEach(([systemId, systemArray]) => {
+        let system = systemArray[0]
+          if (system.Name.toLowerCase().includes(lowerTerm) ||
+              system.NaturalId.toLowerCase().includes(lowerTerm)) {
+            results.push({ type: 'system', id: systemId });
+          }
+        });
+
+        Object.entries(planetData).forEach(([systemId, planets]) => {
+          planets.forEach(planet => {
+            if (planet.PlanetName.toLowerCase().includes(lowerTerm) ||
+                planet.PlanetNaturalId.toLowerCase().includes(lowerTerm)) {
+              results.push({ type: 'planet', id: planet.PlanetNaturalId, systemId: systemId });
+            }
+          });
+        });
+      });
+    }
+
+    const uniqueResults = applyFiltersToResults(results);
+    return finalizeAndHighlight(uniqueResults);
+  }, [universeData, planetData, applyFiltersToResults, finalizeAndHighlight]);
+
+
+  const handleMaterialSearch = useCallback((searchTerm) => {
+    const sanitizedSearchTerm = sanitizeInput(searchTerm);
+    const terms = sanitizedSearchTerm.split(/\s+/).filter(term => term.length >= 1); 
+
+    let results = [];
+    let matchingMaterialIds = [];
+
+    if (terms.length === 0) {
+      Object.entries(planetData).forEach(([systemId, planets]) => {
+        planets.forEach(planet => {
+          results.push({
+            type: 'planet',
+            planetId: planet.PlanetNaturalId,
+            systemId: systemId
+          });
+        });
+      });
+    } else {
+      const matchingMaterials = terms.map(term => {
+        const lowerTerm = term.toLowerCase();
+        const regex = new RegExp(`\\b${lowerTerm}\\b`, 'i');
+        return materials.filter(material =>
+          (regex.test(splitCamelCase(material.Name)) || regex.test(material.Ticker.toLowerCase())) &&
+          ['ores', 'gases', 'liquids', 'minerals'].includes(material.CategoryName)
+        );
+      });
+
+      matchingMaterialIds = matchingMaterials.flat().map(material => material.MaterialId);
+
+      Object.entries(planetData).forEach(([systemId, planets]) => {
+        planets.forEach(planet => {
+          const hasAllMaterials = matchingMaterials.every(materialList =>
+            materialList.some(material =>
+              planet.Resources.some(resource => resource.MaterialId === material.MaterialId)
+            )
+          );
+
+          if (hasAllMaterials) {
+            const planetResources = matchingMaterials.flatMap(materialList =>
+              materialList.filter(material =>
+                planet.Resources.some(resource => resource.MaterialId === material.MaterialId)
+              )
+            );
+
+            planetResources.forEach(material => {
+              const resource = planet.Resources.find(r => r.MaterialId === material.MaterialId);
+              results.push({
+                type: 'material',
+                id: material.MaterialId,
+                name: material.Name,
+                ticker: material.Ticker,
+                planetId: planet.PlanetNaturalId,
+                systemId: systemId,
+                factor: resource.Factor,
+                resourceType: resource.ResourceType,
+                // EXCESSIVE COMMENTING: Calculates the star tier natively during search execution, attaching it to the payload so D3 can render it visually on the map layer seamlessly without re-querying datasets.
+                planetTier: determinePlanetTier(planet.BuildRequirements)
+              });
+            });
+          }
+        });
+      });
+    }
+
+    const uniqueResults = applyFiltersToResults(results);
+    return finalizeAndHighlight(uniqueResults, matchingMaterialIds);
+  }, [planetData, materials, applyFiltersToResults, finalizeAndHighlight]);
+
 
   const handleCompanySearch = useCallback(async (companyCode) => {
     const sanitizedCompanyCode = sanitizeInput(companyCode);
@@ -314,8 +330,109 @@ export const SearchProvider = ({ children }) => {
   }, [planetData]);
 
 
+  const generateSuggestions = useCallback(async (term) => {
+    if (!term || term.trim().length === 0) return [];
+    const lowerTerm = term.toLowerCase().trim();
+    const suggestions = [];
+
+    if (materials) {
+        materials.forEach(m => {
+            if (m.Ticker.toLowerCase().includes(lowerTerm) || m.Name.toLowerCase().includes(lowerTerm)) {
+                suggestions.push({ text: m.Ticker, label: m.Name, category: 'Resource' });
+            }
+        });
+    }
+    
+    if (universeData) {
+        Object.values(universeData).forEach(sysArr => {
+            const sys = sysArr[0];
+            if (sys.Name.toLowerCase().includes(lowerTerm) || sys.NaturalId.toLowerCase().includes(lowerTerm)) {
+                suggestions.push({ text: sys.NaturalId, label: sys.Name, category: 'System' });
+            }
+        });
+    }
+    
+    if (planetData) {
+        Object.values(planetData).forEach(planets => {
+            planets.forEach(p => {
+                if (p.PlanetName.toLowerCase().includes(lowerTerm) || p.PlanetNaturalId.toLowerCase().includes(lowerTerm)) {
+                    suggestions.push({ text: p.PlanetNaturalId, label: p.PlanetName, category: 'Planet' });
+                }
+            });
+        });
+    }
+
+    const sanitizedForFio = sanitizeInput(term);
+    if (sanitizedForFio.length > 0 && sanitizedForFio.length <= 8) {
+        try {
+            const response = await fetch(`https://rest.fnar.net/company/code/${sanitizedForFio}`);
+            if (response.ok) {
+                const data = await response.json();
+                if (data && data.Planets && data.Planets.length > 0) {
+                    suggestions.push({ 
+                      text: data.Code || sanitizedForFio.toUpperCase(), 
+                      label: data.Name || 'FIO Corporation', 
+                      category: 'Corporation' 
+                    });
+                }
+            }
+        } catch (error) {}
+    }
+
+    suggestions.sort((a, b) => {
+        const aIsCorp = a.category === 'Corporation';
+        const bIsCorp = b.category === 'Corporation';
+
+        if (!aIsCorp && bIsCorp) return -1;
+        if (aIsCorp && !bIsCorp) return 1;
+
+        const aExact = a.text.toLowerCase() === lowerTerm;
+        const bExact = b.text.toLowerCase() === lowerTerm;
+        if (aExact && !bExact) return -1;
+        if (!aExact && bExact) return 1;
+        
+        return a.text.length - b.text.length;
+    });
+
+    const unique = [];
+    const seen = new Set();
+    for (const s of suggestions) {
+        const key = `${s.text}-${s.category}`;
+        if (!seen.has(key)) {
+            seen.add(key);
+            unique.push(s);
+        }
+        if (unique.length >= 15) break;
+    }
+
+    return unique;
+  }, [materials, universeData, planetData]);
+
+
+  const executeUnifiedSearch = useCallback(async (option) => {
+    lastQueryRef.current = option;
+    clearHighlights();
+    
+    let results = [];
+    if (option.category === 'Corporation') {
+        setIsCompanySearch(true);
+        setCompanySearchTerm(option.text);
+        results = await handleCompanySearch(option.text);
+    } else if (option.category === 'Resource') {
+        setIsCompanySearch(false);
+        setMaterialSearchTerm(option.text);
+        results = handleMaterialSearch(option.text);
+    } else {
+        setIsCompanySearch(false);
+        setSystemSearchTerm(option.text);
+        results = handleSystemSearch(option.text);
+    }
+    return results;
+  }, [handleCompanySearch, handleMaterialSearch, handleSystemSearch]);
+
+
   const clearSearch = useCallback(() => {
-    setSearchResults([]);
+    setUnifiedSearchTerm('');
     setSystemSearchTerm('');
     setMaterialSearchTerm('');
     setCompanySearchTerm('');
@@ -323,8 +440,9 @@ export const SearchProvider = ({ children }) => {
     setSearchMaterialConcentrationLiquid([]);
     setSearchMaterialConcentrationGaseous([]);
     setSearchMaterialConcentrationMineral([]);
-    clearHighlights();
-  }, []);
+    
+    executeUnifiedSearch({ text: '', category: 'General' });
+  }, [executeUnifiedSearch]);
 
   const updateFilters = useCallback((newFilters) => {
     setFilters(newFilters);
@@ -348,6 +466,16 @@ export const SearchProvider = ({ children }) => {
   }, [clearSearch]);
 
 
+  useEffect(() => {
+    if (planetData && Object.keys(planetData).length > 0) {
+      const timer = setTimeout(() => {
+         executeUnifiedSearch(lastQueryRef.current);
+      }, 100); 
+      return () => clearTimeout(timer);
+    }
+  }, [filters, resourceThreshold, isRelativeThreshold, resourceTypeFilter, executeUnifiedSearch, planetData]);
+
+
   return (
     <SearchContext.Provider
       value={{
@@ -365,6 +493,10 @@ export const SearchProvider = ({ children }) => {
         systemSearchTerm,
         materialSearchTerm,
         companySearchTerm,
+        unifiedSearchTerm,          
+        setUnifiedSearchTerm,
+        showAdvanced,                
+        setShowAdvanced,
         updateSystemSearchTerm,
         updateMaterialSearchTerm,
         updateCompanySearchTerm,
@@ -376,6 +508,8 @@ export const SearchProvider = ({ children }) => {
         setResourceTypeFilter,
         isCompanySearch,
         toggleCompanySearch,
+        generateSuggestions, 
+        executeUnifiedSearch 
       }}
     >
       {children}

@@ -23,7 +23,7 @@ const InfoTooltip = () => {
           padding: '10px',
           borderRadius: '4px',
           boxShadow: '0 2px 5px rgba(0,0,0,0.2)',
-          width: '300px',
+          width: '320px',
           zIndex: 1000,
           border: '2px solid #222222',
         }}>
@@ -47,6 +47,9 @@ const InfoTooltip = () => {
             <li><BookOpen size={16} style={{marginRight: '5px', color: '#f7a600'}} /> - Administration Center</li>
             <li><Anchor size={16} style={{marginRight: '5px', color: '#f7a600'}} /> - Shipyard</li>
           </ul>
+
+          {/* EXCESSIVE COMMENTING: Heuristic disclaimer completely eradicated, as the availability filter relies on accurate total plot capacities retrieved from the bulk API. */}
+
           <h5 style={{ margin: '10px 0 5px 0' }}>Planet Rating:</h5>
           <ul style={{ padding: 0, margin: 0, listStyle: 'none' }}>
             <li>Start at <strong>3★</strong>. Deduct stars by environment penalties.</li>

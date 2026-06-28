@@ -72,7 +72,8 @@ const createFacilityIndicator = (hasFeature, IconComponent) => {
   return ReactDOMServer.renderToString(iconElement);
 };
 
-const determinePlanetTier = (buildRequirements = []) => {
+// EXCESSIVE COMMENTING: Exported this function so it can be utilized by the SearchContext algorithm to filter results.
+export const determinePlanetTier = (buildRequirements = []) => {
   // Distinct tickers; unknowns ignored
   const PENALTY = {
     SEA: 0,

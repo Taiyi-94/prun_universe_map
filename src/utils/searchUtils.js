@@ -9,12 +9,15 @@ export const clearHighlights = () => {
     .attr('stroke', colors.resetSystemStroke)
     .attr('stroke-width', colors.resetSystemStrokeWidth);
 
+  // EXCESSIVE COMMENTING: Actively scrub all dynamically generated percentage/star SVG text overlays whenever the map resets.
+  d3.selectAll('.search-overlay-text').remove();
+
   resetGraphState();
 };
 
 export const highlightSearchResults = (searchResults, highestFactorLiquid, highestFactorGaseous, highestFactorMineral) => {
   console.log(highestFactorLiquid, highestFactorGaseous, highestFactorMineral)
-  // Define color scales
+  
   const colorScaleLiquid = d3.scaleLinear()
     .domain([0, highestFactorLiquid])
     .range([colors.searchSystemFillLowLiquid, colors.searchSystemFillLiquid]);
@@ -26,21 +29,24 @@ export const highlightSearchResults = (searchResults, highestFactorLiquid, highe
     .range([colors.searchSystemFillLowMineral, colors.searchSystemFillMineral]);
 
   if (searchResults.length > 0) {
-    // Reset all systems to default state
     clearHighlights();
 
-    // Track the best resource for each system
     const systemBestResource = {};
+    const systemAllMaterials = {};
 
-    // First pass: determine the best resource to highlight for each system
+    // 1st Pass: Parse the best resource and group all material matches under their root system.
     searchResults.forEach(result => {
       if (result.type === 'material') {
         const systemId = result.systemId;
+        
+        // Collate everything to build the "15% / 10%" multiple-planet strings
+        if (!systemAllMaterials[systemId]) systemAllMaterials[systemId] = [];
+        systemAllMaterials[systemId].push(result);
+
         if (!systemBestResource[systemId]) {
           systemBestResource[systemId] = result;
         } else {
           const current = systemBestResource[systemId];
-          // Simply keep the resource with the highest concentration
           if (result.factor > current.factor) {
             systemBestResource[systemId] = result;
           }
@@ -53,7 +59,9 @@ export const highlightSearchResults = (searchResults, highestFactorLiquid, highe
       }
     });
 
-    // Second pass: highlight systems based on the best resource
+    const g = d3.select('#map-container svg g');
+
+    // 2nd Pass: Handle node color highlighting
     searchResults.forEach(result => {
       let highlightSystemNode = {};
       let fillColor = colors.searchSystemFill;
@@ -79,7 +87,6 @@ export const highlightSearchResults = (searchResults, highestFactorLiquid, highe
           }
           highlightSystemNode = d3.select(`#${CSS.escape(systemId)}`);
         } else {
-          // Skip this result as it's not the best for the system
           return;
         }
       } else if (result.type === 'company_base') {
@@ -95,6 +102,58 @@ export const highlightSearchResults = (searchResults, highestFactorLiquid, highe
           .attr('fill-opacity', 1.0)
           .classed('search-highlight', true);
       }
+    });
+
+    // EXCESSIVE COMMENTING: 3rd Pass. Specifically for material queries, inject text overlay nodes directly into the SVG container representing the concentration % and planet star tier rating.
+    Object.keys(systemAllMaterials).forEach(systemId => {
+      // Order them logically from highest factor to lowest so the most important element is always first in the string sequence
+      const mats = systemAllMaterials[systemId].sort((a, b) => b.factor - a.factor);
+      const rect = d3.select(`#${CSS.escape(systemId)}`);
+      if (rect.empty()) return;
+
+      const x = parseFloat(rect.attr('x'));
+      const y = parseFloat(rect.attr('y'));
+      const width = parseFloat(rect.attr('width'));
+      const height = parseFloat(rect.attr('height'));
+      const cx = x + width / 2;
+      const cy = y + height / 2;
+
+      // Map format: parseFloat dynamically drops ".0" so 14.0 becomes 14, keeping the map highly readable.
+      const percText = mats.map(m => parseFloat((m.factor * 100).toFixed(1)) + '%').join('/');
+      const starText = mats.map(m => (m.planetTier !== undefined ? m.planetTier : '?') + '★').join('/');
+
+      // Isolate the text node into a dedicated g-class wrapper ensuring mouse pointer events pass harmlessly through them into the underlying planet-node tooltip system!
+      const textGroup = g.append('g')
+        .attr('class', 'search-overlay-text')
+        .style('pointer-events', 'none');
+
+      // Top Row: Percentage
+      textGroup.append('text')
+        .attr('x', cx)
+        .attr('y', cy - 1)
+        .attr('text-anchor', 'middle')
+        .attr('dominant-baseline', 'baseline')
+        .attr('fill', '#ffffff')
+        .attr('font-size', '5px')
+        .attr('font-weight', 'bold')
+        .attr('stroke', '#000000')
+        .attr('stroke-width', '0.5px')
+        .attr('paint-order', 'stroke')
+        .text(percText);
+
+      // Bottom Row: Stars
+      textGroup.append('text')
+        .attr('x', cx)
+        .attr('y', cy + 1)
+        .attr('text-anchor', 'middle')
+        .attr('dominant-baseline', 'hanging')
+        .attr('fill', '#f7a600')
+        .attr('font-size', '4.5px')
+        .attr('font-weight', 'bold')
+        .attr('stroke', '#000000')
+        .attr('stroke-width', '0.5px')
+        .attr('paint-order', 'stroke')
+        .text(starText);
     });
   }
 };

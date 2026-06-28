@@ -1,6 +1,9 @@
 import React, { useContext, useState } from 'react';
 import { SearchContext } from '../contexts/SearchContext';
 import { useCogcOverlay } from '../contexts/CogcOverlayContext';
+import { SelectionContext } from '../contexts/SelectionContext';
+import { useDataPoints } from '../contexts/DataPointContext';
+import { useMapMode, MAP_MODES } from '../contexts/MapModeContext';
 import { cogcPrograms } from '../constants/cogcPrograms';
 import ResourceThresholdFilter from './ResourceThresholdFilter';
 
@@ -26,6 +29,24 @@ const FilterCategory = ({ title, options, mouseoverText, selectedOptions, onChan
           onClick={() => onChange(option)}
           tooltip={mouseoverText[index] || option}
           className={`toggle-token${index + 1}`}
+        />
+      ))}
+    </div>
+  </div>
+);
+
+const StarFilter = ({ activeValue, onChange }) => (
+  <div className="filter-category">
+    <h4>Min Stars</h4>
+    <div className="toggle-group">
+      {[0, 1, 2, 3].map((star, index) => (
+        <ToggleToken
+          key={star}
+          label={`${star}★`}
+          active={activeValue === star}
+          onClick={() => onChange(star)}
+          tooltip={`Minimum ${star} Star${star !== 1 ? 's' : ''}`}
+          className={index === 0 ? 'toggle-token1' : index === 3 ? 'toggle-token2' : 'toggle-token-mid'}
         />
       ))}
     </div>
@@ -70,7 +91,43 @@ const CogcFilter = ({ active, program, onToggle, onProgramChange }) => {
   );
 };
 
-const FilterCategories = () => {
+const MapModesFilter = () => {
+  const { isPathfindingEnabled, togglePathfinding } = useContext(SelectionContext);
+  const { isOverlayVisible, toggleOverlayVisibility } = useDataPoints();
+  const { activeMode, toggleMode } = useMapMode();
+
+  return (
+    <div className="filter-category">
+      <h4>Map Overlays</h4>
+      <div className="toggle-group">
+        <ToggleToken
+          label="Gateway Mode"
+          active={activeMode === MAP_MODES.GATEWAY}
+          onClick={toggleMode}
+          tooltip="Toggle Gateway Planning Mode"
+          className="toggle-token1"
+        />
+        <ToggleToken
+          label="Pathfinding"
+          active={isPathfindingEnabled}
+          onClick={togglePathfinding}
+          tooltip="Toggle Pathfinding Navigation"
+          className="toggle-token-mid"
+        />
+        <ToggleToken
+          label="Data Overlay"
+          active={isOverlayVisible}
+          onClick={toggleOverlayVisibility}
+          tooltip="Toggle Meteor Density & System Names"
+          className="toggle-token2"
+        />
+      </div>
+    </div>
+  );
+};
+
+
+export const BasicFilters = () => {
   const { filters, updateFilters } = useContext(SearchContext);
   const [cogcActive, setCogcActive] = useState(false);
   const { overlayProgram } = useCogcOverlay();
@@ -85,21 +142,15 @@ const FilterCategories = () => {
     updateFilters(newFilters);
   };
 
-  const handleCogcToggle = (value) => {
+  const handleMinStarsChange = (value) => {
+    updateFilters({ ...filters, minStars: value });
+  };
+
+  const handleCogcToggle = () => {
     setCogcActive(!cogcActive);
     if (!cogcActive) {
-      // Find the corresponding value for the current overlayProgram
       const programObject = cogcPrograms.find(program => program.display === overlayProgram);
-      let programValue;
-
-      if (programObject) {
-        programValue = programObject.value;
-      } else if (overlayProgram === null || overlayProgram === undefined) {
-        programValue = 'ALL'; // Default to 'ALL' if no overlay program is set
-      } else {
-        console.warn(`No matching program found for: ${overlayProgram}`);
-        programValue = 'ALL'; // Default to 'ALL' if no match is found
-      }
+      let programValue = programObject ? programObject.value : (overlayProgram == null ? 'ALL' : 'ALL');
       updateFilters({ ...filters, cogcProgram: [programValue] });
     } else {
       updateFilters({ ...filters, cogcProgram: [] });
@@ -113,15 +164,62 @@ const FilterCategories = () => {
       } else {
         updateFilters({ ...filters, cogcProgram: [] });
       }
-
   };
 
   return (
-    <div className="filter-categories">
+    <div className="filter-categories basic-filters-container" style={{ display: 'flex', alignItems: 'center' }}>
+      <div className="filter-category">
+        <h4>Features</h4>
+        <div className="toggle-group">
+          <ToggleToken
+            label="Fertile"
+            active={filters.planetType.includes('Fertile')}
+            onClick={() => handleChange('planetType', 'Fertile')}
+            tooltip="Fertile Planets"
+            className="toggle-token1"
+          />
+          {/* EXCESSIVE COMMENTING: Reverted "Uncongested" wording to "Available" since the data is now exact. */}
+          <ToggleToken
+            label="Available"
+            active={filters.requireAvailablePlots}
+            onClick={() => updateFilters({ ...filters, requireAvailablePlots: !filters.requireAvailablePlots })}
+            tooltip="Filter for planets with strictly > 0 available plots"
+            className="toggle-token2"
+          />
+        </div>
+      </div>
+      <StarFilter
+        activeValue={filters.minStars}
+        onChange={handleMinStarsChange}
+      />
+      <CogcFilter
+        active={cogcActive}
+        onToggle={handleCogcToggle}
+        onProgramChange={handleCogcProgramChange}
+      />
+    </div>
+  );
+};
+
+export const AdvancedFilters = () => {
+  const { filters, updateFilters } = useContext(SearchContext);
+
+  const handleChange = (category, option) => {
+    const newFilters = {
+      ...filters,
+      [category]: filters[category].includes(option)
+        ? filters[category].filter(item => item !== option)
+        : [...filters[category], option]
+    };
+    updateFilters(newFilters);
+  };
+
+  return (
+    <div className="filter-categories advanced-filters-container" style={{ display: 'flex', width: '100%', justifyContent: 'flex-start', flexWrap: 'wrap', borderTop: '1px solid #444', paddingTop: '5px', marginTop: '2px' }}>
       <FilterCategory
         title="Planet Type"
-        options={['Rocky', 'Gaseous', 'Fertile']}
-        mouseoverText={['MCG', 'AEF', 'Fertile Planets']}
+        options={['Rocky', 'Gaseous']}
+        mouseoverText={['MCG', 'AEF']}
         selectedOptions={filters.planetType}
         onChange={option => handleChange('planetType', option)}
       />
@@ -146,14 +244,8 @@ const FilterCategories = () => {
         selectedOptions={filters.pressure}
         onChange={option => handleChange('pressure', option)}
       />
-      <CogcFilter
-        active={cogcActive}
-        onToggle={handleCogcToggle}
-        onProgramChange={handleCogcProgramChange}
-      />
       <ResourceThresholdFilter />
+      <MapModesFilter />
     </div>
   );
 };
-
-export default FilterCategories;
