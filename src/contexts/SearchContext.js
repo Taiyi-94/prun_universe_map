@@ -490,22 +490,42 @@ export const SearchProvider = ({ children }) => {
     setSearchMaterialConcentrationLiquid([]);
     setSearchMaterialConcentrationGaseous([]);
     setSearchMaterialConcentrationMineral([]);
-    
-    executeUnifiedSearch({ text: '', category: 'General' });
-  }, [executeUnifiedSearch]);
+
+    // EXCESSIVE COMMENTING: Return to the same blank state as initial page load — drop the active query and wipe all highlights, rather than running a General search that would re-highlight the entire filtered universe.
+    lastQueryRef.current = { text: '', category: 'General' };
+    setSearchResults([]);
+    setIsCompanySearch(false);
+    clearHighlights();
+  }, []);
 
   const updateFilters = useCallback((newFilters) => {
     setFilters(newFilters);
   }, []);
 
 
+  // EXCESSIVE COMMENTING: Snapshot of the filter values, used to distinguish a genuine filter change from incidental re-renders (e.g. data/callback identity churn during initial load).
+  const prevFilterSnapshotRef = useRef(null);
+
   useEffect(() => {
-    if (planetData && Object.keys(planetData).length > 0) {
-      const timer = setTimeout(() => {
-         executeUnifiedSearch(lastQueryRef.current);
-      }, 100); 
-      return () => clearTimeout(timer);
+    if (!(planetData && Object.keys(planetData).length > 0)) return;
+
+    const snapshot = JSON.stringify({ filters, resourceThreshold, isRelativeThreshold, resourceTypeFilter });
+
+    // First time data is ready: record the baseline and skip the auto-run. This prevents the empty/General query from highlighting the entire universe on initial page load.
+    if (prevFilterSnapshotRef.current === null) {
+      prevFilterSnapshotRef.current = snapshot;
+      return;
     }
+
+    // Ignore effect runs where no filter value actually changed (identity churn from planetData / executeUnifiedSearch settling).
+    if (prevFilterSnapshotRef.current === snapshot) return;
+    prevFilterSnapshotRef.current = snapshot;
+
+    // A filter genuinely changed — re-apply the active search (even an empty/General query, so filters refine the full universe as intended).
+    const timer = setTimeout(() => {
+       executeUnifiedSearch(lastQueryRef.current);
+    }, 100);
+    return () => clearTimeout(timer);
   }, [filters, resourceThreshold, isRelativeThreshold, resourceTypeFilter, executeUnifiedSearch, planetData]);
 
 
