@@ -27,7 +27,7 @@ export const SearchProvider = ({ children }) => {
   const [searchMaterialConcentrationGaseous, setSearchMaterialConcentrationGaseous] = useState([]);
   const [searchMaterialConcentrationMineral, setSearchMaterialConcentrationMineral] = useState([]);
   
-  // EXCESSIVE COMMENTING: Migrated state parameter name from the obsolete binary variable to `hideCongested` to support the updated density heuristic.
+  // EXCESSIVE COMMENTING: Reverted 'hideCongested' flag back to 'requireAvailablePlots' to reflect the new strict data accuracy.
   const [filters, setFilters] = useState({
     planetType: ['Rocky', 'Gaseous'],
     gravity: ['Low', 'High'],
@@ -35,7 +35,7 @@ export const SearchProvider = ({ children }) => {
     pressure: ['Low', 'High'],
     cogcProgram: [],
     minStars: 0,
-    hideCongested: false
+    requireAvailablePlots: false
   });
   
   const [plotsData, setPlotsData] = useState({});
@@ -51,7 +51,6 @@ export const SearchProvider = ({ children }) => {
   const [companySearchTerm, setCompanySearchTerm] = useState('');
   const [isCompanySearch, setIsCompanySearch] = useState(false);
 
-  // EXCESSIVE COMMENTING: Ingest the generated cache file built by our automated python loop script.
   useEffect(() => {
     fetch(`${process.env.PUBLIC_URL}/plots_data.json`)
       .then(response => {
@@ -59,7 +58,7 @@ export const SearchProvider = ({ children }) => {
         return response.json();
       })
       .then(data => setPlotsData(data))
-      .catch(error => console.log('Congestion metrics inactive: ', error.message));
+      .catch(error => console.log('Availability metrics inactive: ', error.message));
   }, []);
 
   const maxFactorPerMaterial = useMemo(() => {
@@ -161,9 +160,9 @@ export const SearchProvider = ({ children }) => {
 
       const tierCondition = determinePlanetTier(planet.BuildRequirements) >= (filters.minStars || 0);
 
-      // EXCESSIVE COMMENTING: Density Ceiling Heuristic Loop. Fixed the JS syntax error here (replaced Python's '#' with JavaScript's '//'). If the user flips on the "Uncongested" toggle filter button, we pull the mapped raw site count integer out of `plotsData`. If that count exceeds a flat 400 ceiling limit, we assume the world is locked down and flag it as false to exclude it. Unrecorded/Fresh worlds default to 0 (Uncongested) so they pass safely.
-      const plotsCondition = !filters.hideCongested || 
-                             (plotsData[planet.PlanetNaturalId] === undefined || plotsData[planet.PlanetNaturalId] <= 400);
+      // EXCESSIVE COMMENTING: Exact plot availability check. If the "Available" toggle is active, we check our accurate `plotsData` mapping (which now holds Total - Used plots). We enforce that the available plot count must be strictly greater than 0.
+      const plotsCondition = !filters.requireAvailablePlots || 
+                             (plotsData[planet.PlanetNaturalId] !== undefined && plotsData[planet.PlanetNaturalId] > 0);
 
       return planetTypeCondition && planetFertility && gravityCondition && temperatureCondition &&
              pressureCondition && cogcCondition && tierCondition && plotsCondition;

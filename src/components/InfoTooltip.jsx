@@ -47,12 +47,8 @@ const InfoTooltip = () => {
             <li><BookOpen size={16} style={{marginRight: '5px', color: '#f7a600'}} /> - Administration Center</li>
             <li><Anchor size={16} style={{marginRight: '5px', color: '#f7a600'}} /> - Shipyard</li>
           </ul>
-          
-          {/* EXCESSIVE COMMENTING: Added comprehensive tooltip block describing the specific architectural layout parameters guiding the 400 density heuristic. */}
-          <h5 style={{ margin: '10px 0 5px 0', color: '#f7a600' }}>Heuristic Disclaimers:</h5>
-          <p style={{ margin: '0 0 8px 0', fontSize: '11px', color: '#ccc', lineHeight: '1.3' }}>
-            <strong>Uncongested Filter:</strong> Due to server limitations, this calculation utilizes a relative density ceiling rather than tracking actual open slots. Any planet hosting more than <strong>400 active plots</strong> via FIO data streams is classified as overbuilt. This measurement serves as an approximation and is subject to error as the meta dictates core hub movement.
-          </p>
+
+          {/* EXCESSIVE COMMENTING: Heuristic disclaimer completely eradicated, as the availability filter relies on accurate total plot capacities retrieved from the bulk API. */}
 
           <h5 style={{ margin: '10px 0 5px 0' }}>Planet Rating:</h5>
           <ul style={{ padding: 0, margin: 0, listStyle: 'none' }}>

@@ -178,12 +178,12 @@ export const BasicFilters = () => {
             tooltip="Fertile Planets"
             className="toggle-token1"
           />
-          {/* EXCESSIVE COMMENTING: Pivot adjustment. Swapped token labeling to "Uncongested" to accurately denote density profiling over hard binary capacity slots. */}
+          {/* EXCESSIVE COMMENTING: Reverted "Uncongested" wording to "Available" since the data is now exact. */}
           <ToggleToken
-            label="Uncongested"
-            active={filters.hideCongested}
-            onClick={() => updateFilters({ ...filters, hideCongested: !filters.hideCongested })}
-            tooltip="Filter out overbuilt planets (Heuristic: Less than 400 total active FIO sites)"
+            label="Available"
+            active={filters.requireAvailablePlots}
+            onClick={() => updateFilters({ ...filters, requireAvailablePlots: !filters.requireAvailablePlots })}
+            tooltip="Filter for planets with strictly > 0 available plots"
             className="toggle-token2"
           />
         </div>

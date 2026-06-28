@@ -1,94 +1,65 @@
 import json
 import urllib.request
-import urllib.error
 import os
-import time
 
-# EXCESSIVE COMMENTING: Core file dependencies. We use the local planet data list as our source of truth to avoid blind iteration.
-PLANET_DATA_FILE = os.path.join(os.path.dirname(__file__), "planet_data.json")
+# EXCESSIVE COMMENTING: Defining the new bulk FIO v2 endpoints. 
+# URL_PLANETS provides base planetary data including the critical 'Plots' (Total Capacity) key.
+# URL_SITECOUNTS provides the current 'Count' (Occupied Plots) for every active planet.
+URL_PLANETS = "https://api.fnar.net/planet?include_resources=false&include_workforce_fees=false&include_cogc_programs=false&include_population_reports=false&include_celestial_bodies=false"
+URL_SITECOUNTS = "https://api.fnar.net/planet/sitecount?include_non_player_sites=true"
+
 OUTPUT_FILE = os.path.join(os.path.dirname(__file__), "plots_data.json")
 
-def load_json(filepath):
-    if not os.path.exists(filepath):
-        return None
-    with open(filepath, 'r', encoding='utf-8') as f:
-        return json.load(f)
-
-def save_json(data, filepath):
-    with open(filepath, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=2)
+def fetch_json(url):
+    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Taiyi Map Bulk Updater)'})
+    with urllib.request.urlopen(req) as response:
+        return json.loads(response.read().decode())
 
 def update_plots_data():
-    print("Initializing FIO Congestion Scraper...")
-    planets = load_json(PLANET_DATA_FILE)
-    
-    if not planets:
-        print(f"Error: Missing base data file {PLANET_DATA_FILE}.")
-        return
-
-    # Extract all distinct natural planet identifiers safely
-    planet_ids = list(set([p.get("PlanetNaturalId") for p in planets if p.get("PlanetNaturalId")]))
-    total_planets = len(planet_ids)
-    print(f"Parsed {total_planets} unique planets from local data index.")
-
-    # EXCESSIVE COMMENTING: Progress-retaining resume hook. If the connection fails halfway through the 1-hour crawl, re-running this script will pick up exactly where it left off instead of wiping your cache.
-    parsed_data = load_json(OUTPUT_FILE) or {}
-    planets_to_query = [pid for pid in planet_ids if pid not in parsed_data]
-    remaining = len(planets_to_query)
-    
-    print(f"Cached status: {len(parsed_data)} complete. {remaining} items remaining.")
-    if remaining == 0:
-        print("Dataset is entirely up to date!")
-        return
-
-    print("Executing lookups. Progress is saved instantaneously. Interrupt safely via Ctrl+C.\n")
-
-    count = 0
-    for planet_id in planets_to_query:
-        count += 1
-        # EXCESSIVE COMMENTING: We target the specific FIO planetary sites count module discovered in the Swagger logs.
-        endpoint = f"https://rest.fnar.net/planet/sitescount/{planet_id}"
+    print("Initiating bulk FIO API fetch...")
+    try:
+        # EXCESSIVE COMMENTING: Pulling the entire universe's total capacities in a single request.
+        print("Fetching total planetary capacities...")
+        planets_data = fetch_json(URL_PLANETS)
         
-        try:
-            req = urllib.request.Request(
-                endpoint, 
-                headers={'User-Agent': 'Mozilla/5.0 (Taiyi Map Editor Heuristic Tracker)'}
-            )
-            with urllib.request.urlopen(req) as response:
-                raw_response = response.read().decode()
-                data = json.loads(raw_response)
-                
-                # EXCESSIVE COMMENTING: Handle both integer returns and dictionary responses depending on the FIO deployment version.
-                if isinstance(data, int):
-                    parsed_data[planet_id] = data
-                elif isinstance(data, dict):
-                    parsed_data[planet_id] = data.get("SiteCount", data.get("count", 0))
-                else:
-                    parsed_data[planet_id] = 0
-                
-            print(f"[{count}/{remaining}] Polled {planet_id}: {parsed_data[planet_id]} sites recorded.")
+        # EXCESSIVE COMMENTING: Pulling the entire universe's occupied sites in a single request.
+        print("Fetching active site counts...")
+        sites_data = fetch_json(URL_SITECOUNTS)
 
-        except urllib.error.HTTPError as e:
-            if e.code == 429:
-                print(f"\n[!] Rate limit triggered on {planet_id}. FIO server throttling active.")
-                print("Pausing execution for 15 seconds to obey API guidelines...")
-                time.sleep(15)
-                continue
-            elif e.code == 404:
-                print(f"[{count}/{remaining}] 404 Warning: {planet_id} missing site records. Defaulting to 0.")
-                parsed_data[planet_id] = 0
-            else:
-                print(f"[{count}/{remaining}] Network Failure Code {e.code} encountered on {planet_id}. Skipping instance.")
-        except Exception as e:
-            print(f"[{count}/{remaining}] Thread blocker on {planet_id}: {e}")
+        print("Processing availability mapping...")
+        
+        # 1. Map NaturalId -> Total Plots
+        total_plots_map = {}
+        for p in planets_data:
+            nat_id = p.get("NaturalId")
+            total = p.get("Plots", 0)
+            if nat_id:
+                total_plots_map[nat_id] = total
 
-        # Commit current cache mapping to local disk immediately
-        save_json(parsed_data, OUTPUT_FILE)
+        # 2. Map PlanetNaturalId -> Used Plots
+        used_plots_map = {}
+        for s in sites_data:
+            nat_id = s.get("PlanetNaturalId")
+            count = s.get("Count", 0)
+            if nat_id:
+                used_plots_map[nat_id] = count
 
-        # EXCESSIVE COMMENTING: Mandated 1.1-second sleep throttle to remain perfectly polite to the volunteer crowdsourced FIO architecture.
-        time.sleep(1.1)
+        # 3. Calculate Available = Total - Used
+        available_plots_map = {}
+        for nat_id, total_capacity in total_plots_map.items():
+            used = used_plots_map.get(nat_id, 0)
+            # EXCESSIVE COMMENTING: Ensure we never drop below 0 due to API synchronization quirks.
+            available = max(0, total_capacity - used)
+            available_plots_map[nat_id] = available
 
-    print(f"\nCongestion map generation successful! Cache committed securely to {OUTPUT_FILE}")
+        # Write the flawless available map to disk for React to consume
+        with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
+            json.dump(available_plots_map, f, indent=2)
+
+        print(f"Success! Processed {len(available_plots_map)} planets. Saved to {OUTPUT_FILE}.")
+
+    except Exception as e:
+        print(f"Error executing bulk fetch: {e}")
 
 if __name__ == "__main__":
     update_plots_data()
