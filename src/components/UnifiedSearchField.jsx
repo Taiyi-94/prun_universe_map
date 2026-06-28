@@ -1,16 +1,25 @@
-import React, { useState, useContext, useEffect, useRef } from 'react';
+import React, { useState, useContext, useEffect, useRef, useMemo } from 'react';
 import { SearchContext } from '../contexts/SearchContext';
 
 const UnifiedSearchField = () => {
-  const { 
-    unifiedSearchTerm: inputValue, 
-    setUnifiedSearchTerm: setInputValue, 
-    generateSuggestions, 
-    executeUnifiedSearch 
+  const {
+    unifiedSearchTerm: inputValue,
+    setUnifiedSearchTerm: setInputValue,
+    generateLocalSuggestions,
+    hasExactLocalMatch,
+    fetchFioCompany,
+    executeUnifiedSearch
   } = useContext(SearchContext);
 
-  const [suggestions, setSuggestions] = useState([]);
+  const [localSuggestions, setLocalSuggestions] = useState([]);
+  const [fioSuggestion, setFioSuggestion] = useState(null);
   const [showDropdown, setShowDropdown] = useState(false);
+
+  // EXCESSIVE COMMENTING: Merge the fast local suggestions with the slow FIO corporation hit. The corporation is appended last so it sits at the bottom of the dropdown, preserving the prior "native game elements win" ordering.
+  const suggestions = useMemo(
+    () => (fioSuggestion ? [...localSuggestions, fioSuggestion] : localSuggestions),
+    [localSuggestions, fioSuggestion]
+  );
   const [disambiguationOptions, setDisambiguationOptions] = useState([]);
   const [notification, setNotification] = useState('');
   
@@ -26,29 +35,52 @@ const UnifiedSearchField = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // EXCESSIVE COMMENTING: Fast path — local suggestions on the original 250ms debounce. Purely synchronous data scans, no network.
   useEffect(() => {
     let isCurrent = true;
-    
-    const timer = setTimeout(async () => {
+
+    const timer = setTimeout(() => {
       if (inputValue.trim().length > 0 && !inputValue.includes('(')) {
-        const results = await generateSuggestions(inputValue);
+        const results = generateLocalSuggestions(inputValue);
         if (isCurrent) {
-          setSuggestions(results);
+          setLocalSuggestions(results);
           setShowDropdown(true);
         }
       } else {
         if (isCurrent) {
-          setSuggestions([]);
+          setLocalSuggestions([]);
           setShowDropdown(false);
         }
       }
-    }, 250); 
-    
+    }, 100);
+
     return () => {
       isCurrent = false;
       clearTimeout(timer);
     };
-  }, [inputValue, generateSuggestions]);
+  }, [inputValue, generateLocalSuggestions]);
+
+  // EXCESSIVE COMMENTING: Slow path — FIO API lookup on its own 1 second debounce. Skipped entirely when the term cleanly maps to an existing Resource/Planet, so common ticker/planet lookups never hit the network.
+  useEffect(() => {
+    setFioSuggestion(null);
+
+    if (!inputValue.trim() || inputValue.includes('(') || hasExactLocalMatch(inputValue)) {
+      return;
+    }
+
+    let isCurrent = true;
+    const timer = setTimeout(async () => {
+      const hit = await fetchFioCompany(inputValue);
+      if (isCurrent) {
+        setFioSuggestion(hit);
+      }
+    }, 1000);
+
+    return () => {
+      isCurrent = false;
+      clearTimeout(timer);
+    };
+  }, [inputValue, hasExactLocalMatch, fetchFioCompany]);
 
   const handleSelect = async (option) => {
     setInputValue(`${option.text} (${option.category})`);

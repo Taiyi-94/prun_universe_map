@@ -41,13 +41,12 @@ export const SearchProvider = ({ children }) => {
   const [unifiedSearchTerm, setUnifiedSearchTerm] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const lastQueryRef = useRef({ text: '', category: 'General' });
+  // EXCESSIVE COMMENTING: Caches full FIO company payloads (keyed by upper-cased code) so the autocomplete fetch and the executed company search never hit the network twice for the same corporation.
+  const fioCompanyCacheRef = useRef(new Map());
 
-  const [systemSearchTerm, setSystemSearchTerm] = useState('');
-  const [materialSearchTerm, setMaterialSearchTerm] = useState('');
   const [resourceThreshold, setResourceThreshold] = useState(0);
   const [isRelativeThreshold, setIsRelativeThreshold] = useState(false);
   const [resourceTypeFilter, setResourceTypeFilter] = useState('ALL');
-  const [companySearchTerm, setCompanySearchTerm] = useState('');
   const [isCompanySearch, setIsCompanySearch] = useState(false);
 
   useEffect(() => {
@@ -71,6 +70,19 @@ export const SearchProvider = ({ children }) => {
         }
     }
     return maxPerResource;
+  }, [planetData]);
+
+  // EXCESSIVE COMMENTING: Scan every planet's Resources once to build the set of MaterialIds that can actually be extracted somewhere in the universe. Recomputed only when planetData changes, so freshly-added resources appear in autocomplete automatically.
+  const findableMaterialIds = useMemo(() => {
+    const ids = new Set();
+    if (planetData) {
+      Object.values(planetData).forEach(planets => {
+        planets.forEach(planet => {
+          (planet.Resources || []).forEach(resource => ids.add(resource.MaterialId));
+        });
+      });
+    }
+    return ids;
   }, [planetData]);
 
   const applyFiltersToResults = useCallback((resultsToFilter) => {
@@ -302,9 +314,17 @@ export const SearchProvider = ({ children }) => {
 
   const handleCompanySearch = useCallback(async (companyCode) => {
     const sanitizedCompanyCode = sanitizeInput(companyCode);
+    const cacheKey = sanitizedCompanyCode.toUpperCase();
     try {
-      const response = await fetch(`https://rest.fnar.net/company/code/${sanitizedCompanyCode}`);
-      const data = await response.json();
+      // EXCESSIVE COMMENTING: Reuse the payload the autocomplete already fetched, if available. Only hit the network on a cache miss (e.g. the user typed a full code and submitted before the 1s autocomplete fired).
+      let data = fioCompanyCacheRef.current.get(cacheKey);
+      if (!data) {
+        const response = await fetch(`https://rest.fnar.net/company/code/${sanitizedCompanyCode}`);
+        data = await response.json();
+        if (data && data.Planets) {
+          fioCompanyCacheRef.current.set(cacheKey, data);
+        }
+      }
 
       if (data && data.Planets) {
         const results = data.Planets.map(planet => ({
@@ -330,19 +350,22 @@ export const SearchProvider = ({ children }) => {
   }, [planetData]);
 
 
-  const generateSuggestions = useCallback(async (term) => {
+  // EXCESSIVE COMMENTING: Synchronous local-data autocomplete. Scans materials/systems/planets only — no network. This is the fast path that stays on the existing short debounce in the UI, since it never touches the FIO API.
+  const generateLocalSuggestions = useCallback((term) => {
     if (!term || term.trim().length === 0) return [];
     const lowerTerm = term.toLowerCase().trim();
     const suggestions = [];
 
     if (materials) {
         materials.forEach(m => {
+            // EXCESSIVE COMMENTING: Only suggest resources that actually occur on at least one planet — skip materials that exist in the data file but can't be extracted anywhere.
+            if (!findableMaterialIds.has(m.MaterialId)) return;
             if (m.Ticker.toLowerCase().includes(lowerTerm) || m.Name.toLowerCase().includes(lowerTerm)) {
                 suggestions.push({ text: m.Ticker, label: m.Name, category: 'Resource' });
             }
         });
     }
-    
+
     if (universeData) {
         Object.values(universeData).forEach(sysArr => {
             const sys = sysArr[0];
@@ -351,7 +374,7 @@ export const SearchProvider = ({ children }) => {
             }
         });
     }
-    
+
     if (planetData) {
         Object.values(planetData).forEach(planets => {
             planets.forEach(p => {
@@ -362,36 +385,23 @@ export const SearchProvider = ({ children }) => {
         });
     }
 
-    const sanitizedForFio = sanitizeInput(term);
-    if (sanitizedForFio.length > 0 && sanitizedForFio.length <= 8) {
-        try {
-            const response = await fetch(`https://rest.fnar.net/company/code/${sanitizedForFio}`);
-            if (response.ok) {
-                const data = await response.json();
-                if (data && data.Planets && data.Planets.length > 0) {
-                    suggestions.push({ 
-                      text: data.Code || sanitizedForFio.toUpperCase(), 
-                      label: data.Name || 'FIO Corporation', 
-                      category: 'Corporation' 
-                    });
-                }
-            }
-        } catch (error) {}
-    }
+    // EXCESSIVE COMMENTING: Rank by WHERE the term matched. `text` is the code/ticker/natural-id, `label` is the human name. Lower tier = better. This makes a genuine ticker hit outrank a coincidental name hit, with exact > starts-with > contains within each.
+    const matchTier = (item) => {
+        const text = item.text.toLowerCase();
+        const label = (item.label || '').toLowerCase();
+        if (text === lowerTerm) return 0;          // exact ticker / code
+        if (label === lowerTerm) return 1;         // exact name
+        if (text.startsWith(lowerTerm)) return 2;  // ticker starts with
+        if (label.startsWith(lowerTerm)) return 3; // name starts with
+        if (text.includes(lowerTerm)) return 4;    // ticker contains
+        return 5;                                  // name contains
+    };
 
     suggestions.sort((a, b) => {
-        const aIsCorp = a.category === 'Corporation';
-        const bIsCorp = b.category === 'Corporation';
+        const tierDiff = matchTier(a) - matchTier(b);
+        if (tierDiff !== 0) return tierDiff;
 
-        if (!aIsCorp && bIsCorp) return -1;
-        if (aIsCorp && !bIsCorp) return 1;
-
-        const aExact = a.text.toLowerCase() === lowerTerm;
-        const bExact = b.text.toLowerCase() === lowerTerm;
-        if (aExact && !bExact) return -1;
-        if (!aExact && bExact) return 1;
-        
-        return a.text.length - b.text.length;
+        return a.text.length - b.text.length;      // tiebreak: shorter code first
     });
 
     const unique = [];
@@ -406,7 +416,53 @@ export const SearchProvider = ({ children }) => {
     }
 
     return unique;
-  }, [materials, universeData, planetData]);
+  }, [materials, universeData, planetData, findableMaterialIds]);
+
+
+  // EXCESSIVE COMMENTING: Cheap guard used to suppress the FIO network call. Returns true when the typed term EXACTLY matches a known Resource (ticker/name) or Planet (natural id / name). In those cases the term already cleanly resolves to a local entity, so pinging FIO for a same-named corporation would be wasted traffic.
+  const hasExactLocalMatch = useCallback((term) => {
+    const lowerTerm = (term || '').toLowerCase().trim();
+    if (!lowerTerm) return false;
+
+    if (materials && materials.some(m =>
+        findableMaterialIds.has(m.MaterialId) &&
+        (m.Ticker.toLowerCase() === lowerTerm || m.Name.toLowerCase() === lowerTerm))) {
+        return true;
+    }
+
+    if (planetData && Object.values(planetData).some(planets =>
+        planets.some(p =>
+            p.PlanetNaturalId.toLowerCase() === lowerTerm ||
+            p.PlanetName.toLowerCase() === lowerTerm))) {
+        return true;
+    }
+
+    return false;
+  }, [materials, planetData, findableMaterialIds]);
+
+
+  // EXCESSIVE COMMENTING: Isolated FIO corporation lookup. Returns a single Corporation suggestion (or null). Kept separate from local suggestions so the UI can place it on its own, longer (1s) debounce.
+  const fetchFioCompany = useCallback(async (term) => {
+    const sanitizedForFio = sanitizeInput(term);
+    if (sanitizedForFio.length === 0 || sanitizedForFio.length > 8) return null;
+    try {
+        const response = await fetch(`https://rest.fnar.net/company/code/${sanitizedForFio}`);
+        if (response.ok) {
+            const data = await response.json();
+            if (data && data.Planets && data.Planets.length > 0) {
+                // EXCESSIVE COMMENTING: Stash the full payload so executing this corp search reuses it instead of re-fetching. Key by both the typed code and the canonical FIO Code to cover either lookup path.
+                fioCompanyCacheRef.current.set(sanitizedForFio.toUpperCase(), data);
+                if (data.Code) fioCompanyCacheRef.current.set(data.Code.toUpperCase(), data);
+                return {
+                  text: data.Code || sanitizedForFio.toUpperCase(),
+                  label: data.Name || 'FIO Corporation',
+                  category: 'Corporation'
+                };
+            }
+        }
+    } catch (error) {}
+    return null;
+  }, []);
 
 
   const executeUnifiedSearch = useCallback(async (option) => {
@@ -416,15 +472,12 @@ export const SearchProvider = ({ children }) => {
     let results = [];
     if (option.category === 'Corporation') {
         setIsCompanySearch(true);
-        setCompanySearchTerm(option.text);
         results = await handleCompanySearch(option.text);
     } else if (option.category === 'Resource') {
         setIsCompanySearch(false);
-        setMaterialSearchTerm(option.text);
         results = handleMaterialSearch(option.text);
     } else {
         setIsCompanySearch(false);
-        setSystemSearchTerm(option.text);
         results = handleSystemSearch(option.text);
     }
     return results;
@@ -433,9 +486,6 @@ export const SearchProvider = ({ children }) => {
 
   const clearSearch = useCallback(() => {
     setUnifiedSearchTerm('');
-    setSystemSearchTerm('');
-    setMaterialSearchTerm('');
-    setCompanySearchTerm('');
     setSearchMaterial([]);
     setSearchMaterialConcentrationLiquid([]);
     setSearchMaterialConcentrationGaseous([]);
@@ -447,23 +497,6 @@ export const SearchProvider = ({ children }) => {
   const updateFilters = useCallback((newFilters) => {
     setFilters(newFilters);
   }, []);
-
-  const updateSystemSearchTerm = useCallback((term) => {
-    setSystemSearchTerm(term);
-  }, []);
-
-  const updateMaterialSearchTerm = useCallback((term) => {
-    setMaterialSearchTerm(term);
-  }, []);
-
-  const updateCompanySearchTerm = useCallback((term) => {
-    setCompanySearchTerm(term);
-  }, []);
-
-  const toggleCompanySearch = useCallback(() => {
-    setIsCompanySearch(prev => !prev);
-    clearSearch();
-  }, [clearSearch]);
 
 
   useEffect(() => {
@@ -484,22 +517,13 @@ export const SearchProvider = ({ children }) => {
         searchMaterialConcentrationLiquid,
         searchMaterialConcentrationMineral,
         searchMaterialConcentrationGaseous,
-        handleSystemSearch,
-        handleMaterialSearch,
-        handleCompanySearch,
         clearSearch,
         filters,
         updateFilters,
-        systemSearchTerm,
-        materialSearchTerm,
-        companySearchTerm,
-        unifiedSearchTerm,          
+        unifiedSearchTerm,
         setUnifiedSearchTerm,
-        showAdvanced,                
+        showAdvanced,
         setShowAdvanced,
-        updateSystemSearchTerm,
-        updateMaterialSearchTerm,
-        updateCompanySearchTerm,
         resourceThreshold,
         setResourceThreshold,
         isRelativeThreshold,
@@ -507,9 +531,10 @@ export const SearchProvider = ({ children }) => {
         resourceTypeFilter,
         setResourceTypeFilter,
         isCompanySearch,
-        toggleCompanySearch,
-        generateSuggestions, 
-        executeUnifiedSearch 
+        generateLocalSuggestions,
+        hasExactLocalMatch,
+        fetchFioCompany,
+        executeUnifiedSearch
       }}
     >
       {children}
