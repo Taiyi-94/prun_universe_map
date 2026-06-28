@@ -27,7 +27,6 @@ export const SearchProvider = ({ children }) => {
   const [searchMaterialConcentrationGaseous, setSearchMaterialConcentrationGaseous] = useState([]);
   const [searchMaterialConcentrationMineral, setSearchMaterialConcentrationMineral] = useState([]);
   
-  // EXCESSIVE COMMENTING: Reverted 'hideCongested' flag back to 'requireAvailablePlots' to reflect the new strict data accuracy.
   const [filters, setFilters] = useState({
     planetType: ['Rocky', 'Gaseous'],
     gravity: ['Low', 'High'],
@@ -160,7 +159,6 @@ export const SearchProvider = ({ children }) => {
 
       const tierCondition = determinePlanetTier(planet.BuildRequirements) >= (filters.minStars || 0);
 
-      // EXCESSIVE COMMENTING: Exact plot availability check. If the "Available" toggle is active, we check our accurate `plotsData` mapping (which now holds Total - Used plots). We enforce that the available plot count must be strictly greater than 0.
       const plotsCondition = !filters.requireAvailablePlots || 
                              (plotsData[planet.PlanetNaturalId] !== undefined && plotsData[planet.PlanetNaturalId] > 0);
 
@@ -287,7 +285,9 @@ export const SearchProvider = ({ children }) => {
                 planetId: planet.PlanetNaturalId,
                 systemId: systemId,
                 factor: resource.Factor,
-                resourceType: resource.ResourceType
+                resourceType: resource.ResourceType,
+                // EXCESSIVE COMMENTING: Calculates the star tier natively during search execution, attaching it to the payload so D3 can render it visually on the map layer seamlessly without re-querying datasets.
+                planetTier: determinePlanetTier(planet.BuildRequirements)
               });
             });
           }
