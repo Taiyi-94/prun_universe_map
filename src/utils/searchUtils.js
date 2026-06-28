@@ -1,6 +1,7 @@
 import * as d3 from 'd3';
 import { resetGraphState } from '../utils/graphUtils';
 import { colors } from '../config/config';
+import { phaseMultiplier } from '../constants/phaseMultiplier';
 
 export const clearHighlights = () => {
   d3.selectAll('.search-highlight')
@@ -15,9 +16,9 @@ export const clearHighlights = () => {
   resetGraphState();
 };
 
-export const highlightSearchResults = (searchResults, highestFactorLiquid, highestFactorGaseous, highestFactorMineral) => {
+export const highlightSearchResults = (searchResults, highestFactorLiquid, highestFactorGaseous, highestFactorMineral, isRelativeThreshold = false, resourceTypeFilter = 'ALL') => {
   console.log(highestFactorLiquid, highestFactorGaseous, highestFactorMineral)
-  
+
   const colorScaleLiquid = d3.scaleLinear()
     .domain([0, highestFactorLiquid])
     .range([colors.searchSystemFillLowLiquid, colors.searchSystemFillLiquid]);
@@ -104,10 +105,34 @@ export const highlightSearchResults = (searchResults, highestFactorLiquid, highe
       }
     });
 
+    // When the Relative threshold is active, the displayed concentration must be expressed as a
+    // fraction of the best matching deposit (mirrors the relativeFactor logic in applyFiltersToResults),
+    // rather than the raw absolute concentration shown when the toggle is off.
+    let relativeMax = null;
+    if (isRelativeThreshold) {
+      const materials = searchResults.filter(r => r.type === 'material');
+      if (materials.length > 0) {
+        relativeMax = resourceTypeFilter === 'ALL'
+          ? Math.max(...materials.map(r => r.factor * phaseMultiplier[r.resourceType]))
+          : Math.max(...materials
+              .filter(r => r.resourceType === resourceTypeFilter)
+              .map(r => r.factor));
+      }
+    }
+
+    const toDisplayFactor = (m) => {
+      if (isRelativeThreshold && relativeMax) {
+        return resourceTypeFilter === 'ALL'
+          ? m.factor * phaseMultiplier[m.resourceType] / relativeMax
+          : m.factor / relativeMax;
+      }
+      return m.factor;
+    };
+
     // EXCESSIVE COMMENTING: 3rd Pass. Specifically for material queries, inject text overlay nodes directly into the SVG container representing the concentration % and planet star tier rating.
     Object.keys(systemAllMaterials).forEach(systemId => {
       // Order them logically from highest factor to lowest so the most important element is always first in the string sequence
-      const mats = systemAllMaterials[systemId].sort((a, b) => b.factor - a.factor);
+      const mats = systemAllMaterials[systemId].sort((a, b) => toDisplayFactor(b) - toDisplayFactor(a));
       const rect = d3.select(`#${CSS.escape(systemId)}`);
       if (rect.empty()) return;
 
@@ -119,7 +144,7 @@ export const highlightSearchResults = (searchResults, highestFactorLiquid, highe
       const cy = y + height / 2;
 
       // Map format: parseFloat dynamically drops ".0" so 14.0 becomes 14, keeping the map highly readable.
-      const percText = mats.map(m => parseFloat((m.factor * 100).toFixed(1)) + '%').join('/');
+      const percText = mats.map(m => parseFloat((toDisplayFactor(m) * 100).toFixed(1)) + '%').join('/');
       const starText = mats.map(m => (m.planetTier !== undefined ? m.planetTier : '?') + '★').join('/');
 
       // Isolate the text node into a dedicated g-class wrapper ensuring mouse pointer events pass harmlessly through them into the underlying planet-node tooltip system!

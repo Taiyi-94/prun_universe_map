@@ -5,10 +5,10 @@ import { BadgeCent, Anchor, Truck, BookOpen, Globe } from 'lucide-react';
 import { colors } from '../config/config';
 import { calculate3DDistance } from './distanceUtils';
 import { MAP_MODES, GATEWAY_STRATEGIES } from '../contexts/MapModeContext';
+import { phaseMultiplier } from '../constants/phaseMultiplier';
 
 let universeData = null;
 let planetData = null;
-let universeMaxConcentrations = null;
 
 // Function to fetch and process the universe and planet data
 const fetchData = async () => {
@@ -33,8 +33,6 @@ const fetchData = async () => {
       return acc;
     }, {});
 
-    universeMaxConcentrations = calculateMaxConcentrations(Object.values(planetData).flat());
-
     console.log('Universe and planet data loaded');
   } catch (error) {
     console.error('Error loading data:', error);
@@ -43,21 +41,6 @@ const fetchData = async () => {
 
 // Call this function when the application initializes
 fetchData();
-
-const calculateMaxConcentrations = (planets) => {
-  const maxConc = {};
-
-  planets.forEach(planet => {
-    planet.Resources.forEach(resource => {
-      const key = `${resource.MaterialId}-${resource.ResourceType}`;
-      if (!maxConc[key] || resource.Factor > maxConc[key]) {
-        maxConc[key] = resource.Factor;
-      }
-    });
-  });
-
-  return maxConc;
-};
 
 // Function to create facility indicator
 const createFacilityIndicator = (hasFeature, IconComponent) => {
@@ -116,7 +99,7 @@ const createPlanetTierIndicator = (starCount) => {
 };
 
 // Function to create and show the info panel
-const showInfoPanel = (rect, x, y, searchResults, materials, isRelativeThreshold, selectedCogcProgram) => {
+const showInfoPanel = (rect, x, y, searchResults, materials, isRelativeThreshold, selectedCogcProgram, resourceTypeFilter = 'ALL') => {
   const isPlanetInSearchResults = (planetId) => {
     return searchResults.some(result =>
       (result.type === 'planet' && result.planetId === planetId) ||
@@ -130,10 +113,30 @@ const showInfoPanel = (rect, x, y, searchResults, materials, isRelativeThreshold
     );
   };
 
-  const createConcentrationBar = (concentration, materialId, resourceType, isRelative, maxConcentrations) => {
-    const key = `${materialId}-${resourceType}`;
-    const maxConcentration = maxConcentrations[key] || concentration;
-    const percentage = isRelative ? (concentration / maxConcentration) * 100 : concentration * 100;
+  // Relative mode normalizes against the best matching deposit in the current search result set
+  // (mirrors applyFiltersToResults / the SVG overlay), NOT the per-material universe maximum.
+  let relativeMax = null;
+  if (isRelativeThreshold) {
+    const materialResults = searchResults.filter(r => r.type === 'material');
+    if (materialResults.length > 0) {
+      relativeMax = resourceTypeFilter === 'ALL'
+        ? Math.max(...materialResults.map(r => r.factor * phaseMultiplier[r.resourceType]))
+        : Math.max(...materialResults
+            .filter(r => r.resourceType === resourceTypeFilter)
+            .map(r => r.factor));
+    }
+  }
+
+  const createConcentrationBar = (concentration, materialId, resourceType, isRelative) => {
+    let percentage;
+    if (isRelative && relativeMax) {
+      const relativeFactor = resourceTypeFilter === 'ALL'
+        ? concentration * phaseMultiplier[resourceType] / relativeMax
+        : concentration / relativeMax;
+      percentage = relativeFactor * 100;
+    } else {
+      percentage = concentration * 100;
+    }
     const hue = (percentage / 100) * 120; // 0 is red, 120 is green
     const backgroundColor = `hsl(${hue}, 100%, 50%)`;
 
@@ -216,8 +219,7 @@ const showInfoPanel = (rect, x, y, searchResults, materials, isRelativeThreshold
                 planetResource.Factor,
                 planetResource.MaterialId,
                 planetResource.ResourceType,
-                isRelativeThreshold,
-                universeMaxConcentrations
+                isRelativeThreshold
               )}
             </div>
           `;
@@ -275,7 +277,7 @@ export const drawGatewayHover = (g, systemId, gatewayData, universeData) => {
     }
 };
 
-export const addMouseEvents = (g, searchResults, materials, isRelativeThreshold, selectedCogcProgram, activeMode, gatewayData, universeData) => {
+export const addMouseEvents = (g, searchResults, materials, isRelativeThreshold, selectedCogcProgram, activeMode, gatewayData, universeData, resourceTypeFilter = 'ALL') => {
   g.selectAll('rect').each(function() {
     const rect = d3.select(this);
     const rawId = rect.attr('id');
@@ -358,7 +360,7 @@ export const addMouseEvents = (g, searchResults, materials, isRelativeThreshold,
       } else {
           hoverTimer = setTimeout(() => {
             const [x, y] = d3.pointer(event, document.body); 
-            showInfoPanel(rect, x, y, searchResults, materials, isRelativeThreshold, selectedCogcProgram);
+            showInfoPanel(rect, x, y, searchResults, materials, isRelativeThreshold, selectedCogcProgram, resourceTypeFilter);
           }, 400);
       }
 

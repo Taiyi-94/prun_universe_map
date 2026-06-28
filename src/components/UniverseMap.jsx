@@ -29,7 +29,7 @@ const UniverseMap = React.memo(() => {
   const { overlayProgram } = useCogcOverlay();
   
   // EXCESSIVE COMMENTING: Inject `filters` array to determine if the CoGC logical toggle is actively narrowing the dataset.
-  const { searchResults, isRelativeThreshold, filters } = useContext(SearchContext);
+  const { searchResults, isRelativeThreshold, filters, resourceTypeFilter } = useContext(SearchContext);
   
   const { activeMode, gatewayData, setOriginById, addPlannedGateway, resetSelection, hoveredSystemId, getFtlDistance } = useMapMode();
 
@@ -127,7 +127,7 @@ const UniverseMap = React.memo(() => {
 
       svg.call(zoom);
 
-      addMouseEvents(g, searchResults, materials, isRelativeThreshold, selectedProgramValue, activeMode, gatewayData, universeData);
+      addMouseEvents(g, searchResults, materials, isRelativeThreshold, selectedProgramValue, activeMode, gatewayData, universeData, resourceTypeFilter);
 
       svgRef.current = svgNode;
       graphRef.current = { svg, g };
@@ -156,13 +156,14 @@ const UniverseMap = React.memo(() => {
           materials, 
           isRelativeThreshold, 
           selectedProgramValue,
-          activeMode, 
+          activeMode,
           gatewayData,
-          universeData
+          universeData,
+          resourceTypeFilter
       );
       attachClickEvents(graphRef.current.g);
     }
-  }, [searchResults, materials, isRelativeThreshold, selectedProgramValue, activeMode, gatewayData, attachClickEvents, universeData]);
+  }, [searchResults, materials, isRelativeThreshold, selectedProgramValue, activeMode, gatewayData, attachClickEvents, universeData, resourceTypeFilter]);
 
   useEffect(() => {
     if (!graphRef.current || !universeData) return;

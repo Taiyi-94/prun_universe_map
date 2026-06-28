@@ -199,10 +199,10 @@ export const SearchProvider = ({ children }) => {
     setSearchMaterialConcentrationMineral(highestFactorMineral);
 
     setSearchResults(uniqueResults);
-    highlightSearchResults(uniqueResults, highestFactorLiquid, highestFactorGaseous, highestFactorMineral);
+    highlightSearchResults(uniqueResults, highestFactorLiquid, highestFactorGaseous, highestFactorMineral, isRelativeThreshold, resourceTypeFilter);
     setSearchMaterial(matchingMaterialIds);
     return uniqueResults;
-  }, []);
+  }, [isRelativeThreshold, resourceTypeFilter]);
 
   const handleSystemSearch = useCallback((searchTerm) => {
     const sanitizedSearchTerm = sanitizeInput(searchTerm);
